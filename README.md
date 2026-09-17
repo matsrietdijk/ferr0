@@ -24,6 +24,10 @@ ferr0 delete <memory-id>
 
 Settings resolve in order: flags (`--url`, `--api-key`, `--user-id`, `--agent-id`, `--run-id`), then `FERR0_*` environment variables, then `$XDG_CONFIG_HOME/ferr0/config.toml` (default `~/.config`). Add `--json` to print the raw server response.
 
+## Agent skill
+
+[`skills/ferr0/SKILL.md`](skills/ferr0/SKILL.md) teaches AI coding agents to use ferr0. It follows the [Agent Skills](https://agentskills.io) format, so any compatible agent can use it: copy the `skills/ferr0` directory into your agent's skills directory.
+
 ## Development
 
 ```sh
