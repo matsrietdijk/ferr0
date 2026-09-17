@@ -18,8 +18,10 @@ ferr0 config set api-key <key>
 ferr0 config set user-id alice
 
 ferr0 add "Prefers green tea"
+echo "Works from home on Fridays" | ferr0 add
 ferr0 search "drinks" --limit 5
 ferr0 list
+ferr0 get <memory-id>
 ferr0 update <memory-id> "Prefers black coffee"
 ferr0 delete <memory-id>
 ```

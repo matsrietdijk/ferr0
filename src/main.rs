@@ -1,6 +1,7 @@
 mod cli;
 mod client;
 mod config;
+mod input;
 mod output;
 mod setup;
 
@@ -29,9 +30,16 @@ fn memory_command(path: &Path, global: GlobalArgs, command: MemoryCommand) -> Re
     let scope = &settings.scope;
     let not_found = "No memories found.";
     let (response, empty) = match command {
-        MemoryCommand::Add { text } => (client.add(&text, scope)?, "No memories added."),
-        MemoryCommand::Search { query, limit } => (client.search(&query, scope, limit)?, not_found),
+        MemoryCommand::Add { text } => {
+            let text = input::from_arg_or_stdin(text, "text")?;
+            (client.add(&text, scope)?, "No memories added.")
+        }
+        MemoryCommand::Search { query, limit } => {
+            let query = input::from_arg_or_stdin(query, "query")?;
+            (client.search(&query, scope, limit)?, not_found)
+        }
         MemoryCommand::List { limit } => (client.list(scope, limit)?, not_found),
+        MemoryCommand::Get { id } => (client.get(&id)?, ""),
         MemoryCommand::Update { id, text } => (client.update(&id, &text)?, ""),
         MemoryCommand::Delete { id } => (client.delete(&id)?, ""),
     };

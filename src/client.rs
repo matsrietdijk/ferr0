@@ -131,6 +131,10 @@ impl Client {
         self.send(self.http.get(url))
     }
 
+    pub fn get(&self, id: &str) -> Result<Value> {
+        self.send(self.http.get(self.endpoint(&["memories", id])))
+    }
+
     pub fn update(&self, id: &str, text: &str) -> Result<Value> {
         let url = self.endpoint(&["memories", id]);
         self.send(self.http.put(url).json(&UpdateRequest { text }))
@@ -260,6 +264,22 @@ mod tests {
         client.list(&user("alice"), Some(5)).unwrap();
 
         mock.assert();
+    }
+
+    #[test]
+    fn get_fetches_the_memory_by_encoded_id() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("GET", "/memories/a%2Fb")
+            .match_header("x-api-key", "secret")
+            .with_body(r#"{"id": "a/b", "memory": "likes tea"}"#)
+            .create();
+
+        let client = Client::new(&server.url(), Some("secret".into())).unwrap();
+        let response = client.get("a/b").unwrap();
+
+        mock.assert();
+        assert_eq!(response, json!({"id": "a/b", "memory": "likes tea"}));
     }
 
     #[test]
