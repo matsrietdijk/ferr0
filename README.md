@@ -10,6 +10,8 @@ Early development. ferr0 connects to an existing self-hosted Mem0 REST server us
 
 ## Usage
 
+Run `ferr0 setup` to enter the server URL, API key, and user id, check the connection, and install the agent skill. Or set values directly:
+
 ```sh
 ferr0 config set url http://localhost:8888
 ferr0 config set api-key <key>
@@ -26,7 +28,7 @@ Settings resolve in order: flags (`--url`, `--api-key`, `--user-id`, `--agent-id
 
 ## Agent skill
 
-[`skills/ferr0/SKILL.md`](skills/ferr0/SKILL.md) teaches AI coding agents to use ferr0. It follows the [Agent Skills](https://agentskills.io) format, so any compatible agent can use it: copy the `skills/ferr0` directory into your agent's skills directory.
+[`skills/ferr0/SKILL.md`](skills/ferr0/SKILL.md) teaches AI coding agents to use ferr0. It follows the [Agent Skills](https://agentskills.io) format, so any compatible agent can use it. `ferr0 setup` installs it into `~/.agents/skills` (read by most agents), `~/.claude/skills`, or an agent's own skills directory, or you can copy the `skills/ferr0` directory yourself.
 
 ## Development
 

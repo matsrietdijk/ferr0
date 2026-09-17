@@ -2,6 +2,7 @@ mod cli;
 mod client;
 mod config;
 mod output;
+mod setup;
 
 use std::path::Path;
 
@@ -17,6 +18,7 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Memory(command) => memory_command(&path, cli.global, command),
         Command::Config(command) => config_command(&path, command),
+        Command::Setup => setup::run(&path),
     }
 }
 

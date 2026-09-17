@@ -1,10 +1,30 @@
-use anyhow::{Context, Result, bail};
+use std::fmt;
+
+use anyhow::{Context, Result};
 use reqwest::{
-    Url,
+    StatusCode, Url,
     blocking::{Client as Http, RequestBuilder},
 };
 use serde::Serialize;
 use serde_json::Value;
+
+#[derive(Debug)]
+pub struct ServerError {
+    pub status: StatusCode,
+    detail: String,
+}
+
+impl fmt::Display for ServerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "server returned {}", self.status)?;
+        if !self.detail.is_empty() {
+            write!(f, ": {}", self.detail)?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for ServerError {}
 
 #[derive(Debug, Default, Serialize)]
 pub struct Scope {
@@ -116,6 +136,10 @@ impl Client {
         self.send(self.http.put(url).json(&UpdateRequest { text }))
     }
 
+    pub fn me(&self) -> Result<Value> {
+        self.send(self.http.get(self.endpoint(&["auth", "me"])))
+    }
+
     pub fn delete(&self, id: &str) -> Result<Value> {
         self.send(self.http.delete(self.endpoint(&["memories", id])))
     }
@@ -142,11 +166,10 @@ impl Client {
         let body = serde_json::from_str(&text).unwrap_or(Value::String(text));
         if !status.is_success() {
             let detail = body.get("detail").unwrap_or(&body);
-            match detail.as_str() {
-                Some("") => bail!("server returned {status}"),
-                Some(detail) => bail!("server returned {status}: {detail}"),
-                None => bail!("server returned {status}: {detail}"),
-            }
+            let detail = detail
+                .as_str()
+                .map_or_else(|| detail.to_string(), str::to_string);
+            return Err(ServerError { status, detail }.into());
         }
         Ok(body)
     }

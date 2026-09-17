@@ -42,6 +42,8 @@ pub enum Command {
     Memory(MemoryCommand),
     #[command(subcommand, about = "Manage the config file")]
     Config(ConfigCommand),
+    #[command(about = "Interactively configure ferr0 and install the agent skill")]
+    Setup,
 }
 
 #[derive(Subcommand)]
