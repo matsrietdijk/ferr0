@@ -1,0 +1,55 @@
+mod cli;
+mod client;
+mod config;
+mod output;
+
+use std::path::Path;
+
+use anyhow::Result;
+use clap::Parser;
+
+use cli::{Cli, Command, ConfigCommand, GlobalArgs, MemoryCommand};
+use client::Client;
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+    let path = config::default_path()?;
+    match cli.command {
+        Command::Memory(command) => memory_command(&path, cli.global, command),
+        Command::Config(command) => config_command(&path, command),
+    }
+}
+
+fn memory_command(path: &Path, global: GlobalArgs, command: MemoryCommand) -> Result<()> {
+    let json = global.json;
+    let settings = config::resolve(global, config::load(path)?)?;
+    let client = Client::new(&settings.url, settings.api_key)?;
+    let scope = &settings.scope;
+    let not_found = "No memories found.";
+    let (response, empty) = match command {
+        MemoryCommand::Add { text } => (client.add(&text, scope)?, "No memories added."),
+        MemoryCommand::Search { query, limit } => (client.search(&query, scope, limit)?, not_found),
+        MemoryCommand::List { limit } => (client.list(scope, limit)?, not_found),
+        MemoryCommand::Update { id, text } => (client.update(&id, &text)?, ""),
+        MemoryCommand::Delete { id } => (client.delete(&id)?, ""),
+    };
+    if json {
+        println!("{}", output::pretty(&response));
+    } else {
+        println!("{}", output::render(&response, empty));
+    }
+    Ok(())
+}
+
+fn config_command(path: &Path, command: ConfigCommand) -> Result<()> {
+    let mut file = config::load(path)?;
+    match command {
+        ConfigCommand::Set { key, value } => {
+            file.set(key, value);
+            config::save(path, &file)?;
+            println!("Saved to {}", path.display());
+        }
+        ConfigCommand::Show => println!("{}\n{}", path.display(), file.describe()),
+    }
+    Ok(())
+}

@@ -1,0 +1,17 @@
+[package]
+name = "ferr0"
+version = "0.1.0"
+edition = "2024"
+description = "A Rust CLI for self-hosted Mem0"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive", "env"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "json", "rustls"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+toml = "1.1.6"
+
+[dev-dependencies]
+mockito = "1.7.2"
+tempfile = "3.27.0"
