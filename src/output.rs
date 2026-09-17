@@ -11,6 +11,9 @@ pub fn render(response: &Value, empty: &str) -> String {
             .collect::<Vec<_>>()
             .join("\n");
     }
+    if response.get("memory").is_some_and(Value::is_string) {
+        return render_memory(response);
+    }
     if let Some(message) = response.get("message").and_then(Value::as_str) {
         return message.to_string();
     }
@@ -63,6 +66,12 @@ mod tests {
     fn renders_server_message() {
         let response = json!({"message": "Memory deleted successfully"});
         assert_eq!(render(&response, ""), "Memory deleted successfully");
+    }
+
+    #[test]
+    fn renders_single_memory_as_one_line() {
+        let response = json!({"id": "1", "memory": "likes tea", "hash": "abc"});
+        assert_eq!(render(&response, ""), "1  likes tea");
     }
 
     #[test]

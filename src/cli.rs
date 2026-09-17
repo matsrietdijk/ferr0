@@ -49,10 +49,14 @@ pub enum Command {
 #[derive(Subcommand)]
 pub enum MemoryCommand {
     #[command(about = "Add a memory")]
-    Add { text: String },
+    Add {
+        #[arg(help = "Memory text; read from stdin when omitted")]
+        text: Option<String>,
+    },
     #[command(about = "Search memories")]
     Search {
-        query: String,
+        #[arg(help = "Search query; read from stdin when omitted")]
+        query: Option<String>,
         #[arg(long, help = "Maximum number of results")]
         limit: Option<u32>,
     },
@@ -61,6 +65,8 @@ pub enum MemoryCommand {
         #[arg(long, help = "Maximum number of results")]
         limit: Option<u32>,
     },
+    #[command(about = "Show a memory")]
+    Get { id: String },
     #[command(about = "Replace the text of a memory")]
     Update { id: String, text: String },
     #[command(about = "Delete a memory")]
