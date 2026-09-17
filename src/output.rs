@@ -1,4 +1,6 @@
-use serde_json::Value;
+use serde_json::{Value, json};
+
+use crate::client::ServerError;
 
 pub fn render(response: &Value, empty: &str) -> String {
     if let Some(results) = response.get("results").and_then(Value::as_array) {
@@ -24,6 +26,14 @@ pub fn pretty(response: &Value) -> String {
     serde_json::to_string_pretty(response).unwrap_or_else(|_| response.to_string())
 }
 
+pub fn error(error: &anyhow::Error) -> Value {
+    let mut body = json!({"message": format!("{error:#}")});
+    if let Some(server) = error.downcast_ref::<ServerError>() {
+        body["status"] = server.status.as_u16().into();
+    }
+    json!({"error": body})
+}
+
 fn render_memory(memory: &Value) -> String {
     let text = |key| memory.get(key).and_then(Value::as_str);
     let mut parts = Vec::new();
@@ -40,9 +50,11 @@ fn render_memory(memory: &Value) -> String {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use anyhow::anyhow;
+    use mockito::Server;
 
     use super::*;
+    use crate::client::{Client, Scope};
 
     #[test]
     fn renders_one_line_per_result() {
@@ -77,5 +89,36 @@ mod tests {
     #[test]
     fn renders_unknown_shapes_as_json() {
         assert_eq!(render(&json!({"id": "1"}), ""), "{\n  \"id\": \"1\"\n}");
+    }
+
+    #[test]
+    fn error_includes_server_status_and_detail() {
+        let mut server = Server::new();
+        server
+            .mock("GET", "/memories")
+            .with_status(401)
+            .with_body(r#"{"detail": "Invalid API key"}"#)
+            .create();
+
+        let client = Client::new(&server.url(), None).unwrap();
+        let error = client.list(&Scope::default(), None).unwrap_err();
+
+        assert_eq!(
+            super::error(&error),
+            json!({"error": {
+                "message": "server returned 401 Unauthorized: Invalid API key",
+                "status": 401,
+            }})
+        );
+    }
+
+    #[test]
+    fn error_without_server_status_keeps_the_cause_chain() {
+        let error = anyhow!("connection refused").context("cannot reach the Mem0 server");
+
+        assert_eq!(
+            super::error(&error),
+            json!({"error": {"message": "cannot reach the Mem0 server: connection refused"}})
+        );
     }
 }

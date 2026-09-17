@@ -5,7 +5,7 @@ mod input;
 mod output;
 mod setup;
 
-use std::path::Path;
+use std::{path::Path, process::ExitCode};
 
 use anyhow::Result;
 use clap::Parser;
@@ -13,8 +13,19 @@ use clap::Parser;
 use cli::{Cli, Command, ConfigCommand, GlobalArgs, MemoryCommand};
 use client::Client;
 
-fn main() -> Result<()> {
+fn main() -> Result<ExitCode> {
     let cli = Cli::parse();
+    let json = cli.global.json && matches!(cli.command, Command::Memory(_));
+    match run(cli) {
+        Err(error) if json => {
+            println!("{}", output::pretty(&output::error(&error)));
+            Ok(ExitCode::FAILURE)
+        }
+        result => result.map(|()| ExitCode::SUCCESS),
+    }
+}
+
+fn run(cli: Cli) -> Result<()> {
     let path = config::default_path()?;
     match cli.command {
         Command::Memory(command) => memory_command(&path, cli.global, command),
