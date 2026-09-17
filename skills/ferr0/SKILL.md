@@ -51,7 +51,7 @@ Always add `--json` and read the response as JSON.
 
 ## Failures
 
-ferr0 exits with a non-zero status and prints `Error: ...` to stderr.
+With `--json`, ferr0 exits with a non-zero status and prints the error as JSON on stdout: `{"error": {"message": "...", "status": 401}}`. `status` is the HTTP status code and is present only when the server returned an error. Match the cases below against `message`.
 
 - `no server URL`: the server is not configured; ask the user to run `ferr0 config set url <url>`.
 - `cannot reach the Mem0 server`: the server is down or the URL is wrong; report it rather than retrying repeatedly.
