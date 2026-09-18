@@ -97,9 +97,14 @@ struct SearchRequest<'a> {
     top_k: Option<u32>,
 }
 
-#[derive(Serialize)]
-struct UpdateRequest<'a> {
-    text: &'a str,
+#[derive(Debug, Default, Serialize)]
+pub struct Changes {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiration_date: Option<Option<String>>,
 }
 
 pub struct Client {
@@ -160,9 +165,9 @@ impl Client {
         self.send(self.http.get(self.endpoint(&["memories", id])))
     }
 
-    pub fn update(&self, id: &str, text: &str) -> Result<Value> {
+    pub fn update(&self, id: &str, changes: &Changes) -> Result<Value> {
         let url = self.endpoint(&["memories", id]);
-        self.send(self.http.put(url).json(&UpdateRequest { text }))
+        self.send(self.http.put(url).json(changes))
     }
 
     pub fn me(&self) -> Result<Value> {
@@ -358,11 +363,57 @@ mod tests {
             .create();
 
         let client = Client::new(&format!("{}/mem0/", server.url()), None).unwrap();
-        client.update("a/b", "likes coffee").unwrap();
+        let changes = Changes {
+            text: Some("likes coffee".into()),
+            ..Changes::default()
+        };
+        client.update("a/b", &changes).unwrap();
         client.delete("a/b").unwrap();
 
         update.assert();
         delete.assert();
+    }
+
+    #[test]
+    fn update_sends_only_the_changed_fields() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("PUT", "/memories/1")
+            .match_body(Matcher::Json(json!({
+                "metadata": {"topic": "drinks"},
+                "expiration_date": "2026-12-31",
+            })))
+            .with_body("{}")
+            .create();
+
+        let changes = Changes {
+            metadata: Some(json!({"topic": "drinks"})),
+            expiration_date: Some(Some("2026-12-31".into())),
+            ..Changes::default()
+        };
+        let client = Client::new(&server.url(), None).unwrap();
+        client.update("1", &changes).unwrap();
+
+        mock.assert();
+    }
+
+    #[test]
+    fn update_clears_the_expiration_date_with_null() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("PUT", "/memories/1")
+            .match_body(Matcher::Json(json!({"expiration_date": null})))
+            .with_body("{}")
+            .create();
+
+        let changes = Changes {
+            expiration_date: Some(None),
+            ..Changes::default()
+        };
+        let client = Client::new(&server.url(), None).unwrap();
+        client.update("1", &changes).unwrap();
+
+        mock.assert();
     }
 
     #[test]

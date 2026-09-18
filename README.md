@@ -27,6 +27,7 @@ ferr0 search "drinks" --limit 5
 ferr0 list
 ferr0 get <memory-id>
 ferr0 update <memory-id> "Prefers black coffee"
+ferr0 update <memory-id> --metadata '{"topic": "drinks"}' --no-expires
 ferr0 delete <memory-id>
 ```
 

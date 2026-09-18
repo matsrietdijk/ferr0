@@ -11,7 +11,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use cli::{Cli, Command, ConfigCommand, GlobalArgs, MemoryCommand};
-use client::{AddOptions, Client, Message};
+use client::{AddOptions, Changes, Client, Message};
 
 fn main() -> Result<ExitCode> {
     let cli = Cli::parse();
@@ -70,7 +70,21 @@ fn memory_command(path: &Path, global: GlobalArgs, command: MemoryCommand) -> Re
         }
         MemoryCommand::List { limit } => (client.list(scope, limit)?, not_found),
         MemoryCommand::Get { id } => (client.get(&id)?, ""),
-        MemoryCommand::Update { id, text } => (client.update(&id, &text)?, ""),
+        MemoryCommand::Update {
+            id,
+            text,
+            metadata,
+            expires,
+            no_expires,
+        } => {
+            let expires = input::parse_expires(expires.as_deref())?;
+            let changes = Changes {
+                text: input::optional_from_arg_or_stdin(text)?.filter(|text| !text.is_empty()),
+                metadata: input::parse_metadata(metadata.as_deref())?,
+                expiration_date: (expires.is_some() || no_expires).then_some(expires),
+            };
+            (client.update(&id, &changes)?, "")
+        }
         MemoryCommand::Delete { id } => (client.delete(&id)?, ""),
     };
     if json {

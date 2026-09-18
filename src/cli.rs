@@ -91,8 +91,23 @@ pub enum MemoryCommand {
     },
     #[command(about = "Show a memory")]
     Get { id: String },
-    #[command(about = "Replace the text of a memory")]
-    Update { id: String, text: String },
+    #[command(about = "Change the text, metadata or expiration date of a memory")]
+    Update {
+        id: String,
+        #[arg(help = "New memory text; read from stdin when omitted")]
+        text: Option<String>,
+        #[arg(short, long, value_name = "JSON", help = "Metadata as JSON")]
+        metadata: Option<String>,
+        #[arg(
+            long,
+            value_name = "YYYY-MM-DD",
+            conflicts_with = "no_expires",
+            help = "Expiration date, in the future"
+        )]
+        expires: Option<String>,
+        #[arg(long, help = "Remove the expiration date")]
+        no_expires: bool,
+    },
     #[command(about = "Delete a memory")]
     Delete { id: String },
 }
@@ -110,4 +125,26 @@ pub enum ConfigKey {
     Url,
     ApiKey,
     UserId,
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::error::ErrorKind;
+
+    use super::*;
+
+    #[test]
+    fn update_rejects_expires_with_no_expires() {
+        let error = Cli::try_parse_from([
+            "ferr0",
+            "update",
+            "1",
+            "--expires",
+            "2026-12-31",
+            "--no-expires",
+        ])
+        .err()
+        .unwrap();
+        assert_eq!(error.kind(), ErrorKind::ArgumentConflict);
+    }
 }

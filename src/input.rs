@@ -11,13 +11,25 @@ use serde_json::Value;
 use crate::client::Message;
 
 pub fn from_arg_or_stdin(arg: Option<String>, name: &str) -> Result<String> {
+    resolve(arg, piped_stdin(), name)
+}
+
+pub fn optional_from_arg_or_stdin(arg: Option<String>) -> Result<Option<String>> {
+    read(arg, piped_stdin())
+}
+
+fn piped_stdin() -> Option<impl Read> {
     let stdin = io::stdin();
-    let piped = (!stdin.is_terminal()).then(|| stdin.lock());
-    resolve(arg, piped, name)
+    (!stdin.is_terminal()).then(|| stdin.lock())
 }
 
 fn resolve(arg: Option<String>, piped: Option<impl Read>, name: &str) -> Result<String> {
-    if let Some(arg) = arg {
+    read(arg, piped)?
+        .with_context(|| format!("no {name} given: pass it as an argument or pipe it on stdin"))
+}
+
+fn read(arg: Option<String>, piped: Option<impl Read>) -> Result<Option<String>> {
+    if arg.is_some() {
         return Ok(arg);
     }
     let mut text = String::new();
@@ -27,10 +39,7 @@ fn resolve(arg: Option<String>, piped: Option<impl Read>, name: &str) -> Result<
             .context("cannot read from stdin")?;
     }
     let text = text.trim();
-    if text.is_empty() {
-        bail!("no {name} given: pass it as an argument or pipe it on stdin");
-    }
-    Ok(text.to_string())
+    Ok((!text.is_empty()).then(|| text.to_string()))
 }
 
 pub fn messages_from_file(path: &Path) -> Result<Vec<Message>> {
@@ -152,6 +161,12 @@ mod tests {
             error.to_string(),
             "no messages given: the messages array is empty"
         );
+    }
+
+    #[test]
+    fn reads_nothing_without_an_argument_or_piped_input() {
+        assert_eq!(read(None, Some(" \n".as_bytes())).unwrap(), None);
+        assert_eq!(read(None, None::<&[u8]>).unwrap(), None);
     }
 
     #[test]
