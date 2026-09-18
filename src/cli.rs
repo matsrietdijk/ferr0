@@ -53,6 +53,8 @@ pub enum Command {
     Config(ConfigCommand),
     #[command(about = "Interactively configure ferr0 and install the agent skill")]
     Setup,
+    #[command(about = "Check the server URL and API key")]
+    Status,
 }
 
 #[derive(Subcommand)]

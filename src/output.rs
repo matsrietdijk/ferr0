@@ -1,3 +1,6 @@
+use std::time::Duration;
+
+use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::client::ServerError;
@@ -24,6 +27,40 @@ pub fn render(response: &Value, empty: &str) -> String {
 
 pub fn pretty(response: &Value) -> String {
     serde_json::to_string_pretty(response).unwrap_or_else(|_| response.to_string())
+}
+
+const BACKEND: &str = "self-hosted";
+
+pub fn status(url: &str, error: Option<&anyhow::Error>) -> Value {
+    json!({
+        "connected": error.is_none(),
+        "backend": BACKEND,
+        "base_url": if error.is_none() { url } else { "" },
+    })
+}
+
+pub fn render_status(url: &str, error: Option<&anyhow::Error>, latency: Duration) -> String {
+    let mut lines = Vec::new();
+    match error {
+        None => {
+            lines.push("● Connected".to_string());
+            lines.push(format!("Backend:  {BACKEND}"));
+            lines.push(format!("API URL:  {url}"));
+        }
+        Some(error) => {
+            lines.push("● Disconnected".to_string());
+            lines.push(format!("Backend:  {BACKEND}"));
+            lines.push(format!("Error:    {error:#}"));
+            if error
+                .downcast_ref::<ServerError>()
+                .is_some_and(|error| error.status == StatusCode::UNAUTHORIZED)
+            {
+                lines.push("Run `ferr0 setup` to reconfigure your API key".to_string());
+            }
+        }
+    }
+    lines.push(format!("Latency:  {:.2}s", latency.as_secs_f64()));
+    lines.join("\n")
 }
 
 pub fn error(error: &anyhow::Error) -> Value {
@@ -89,6 +126,47 @@ mod tests {
     #[test]
     fn renders_unknown_shapes_as_json() {
         assert_eq!(render(&json!({"id": "1"}), ""), "{\n  \"id\": \"1\"\n}");
+    }
+
+    #[test]
+    fn status_reports_connected_server() {
+        let latency = Duration::from_millis(120);
+        assert_eq!(
+            status("http://mem0", None),
+            json!({"connected": true, "backend": "self-hosted", "base_url": "http://mem0"})
+        );
+        assert_eq!(
+            render_status("http://mem0", None, latency),
+            "● Connected\nBackend:  self-hosted\nAPI URL:  http://mem0\nLatency:  0.12s"
+        );
+    }
+
+    #[test]
+    fn status_reports_rejected_api_key() {
+        let mut server = Server::new();
+        server.mock("GET", "/auth/me").with_status(401).create();
+        let client = Client::new(&server.url(), None).unwrap();
+        let error = client.me().unwrap_err();
+
+        assert_eq!(
+            status(&server.url(), Some(&error)),
+            json!({"connected": false, "backend": "self-hosted", "base_url": ""})
+        );
+        assert_eq!(
+            render_status(&server.url(), Some(&error), Duration::ZERO),
+            "● Disconnected\nBackend:  self-hosted\nError:    server returned 401 Unauthorized\n\
+             Run `ferr0 setup` to reconfigure your API key\nLatency:  0.00s"
+        );
+    }
+
+    #[test]
+    fn status_reports_unreachable_server_without_hint() {
+        let error = anyhow!("connection refused").context("cannot reach the Mem0 server");
+
+        let text = render_status("http://mem0", Some(&error), Duration::ZERO);
+
+        assert!(text.contains("Error:    cannot reach the Mem0 server: connection refused"));
+        assert!(!text.contains("ferr0 setup"), "{text}");
     }
 
     #[test]

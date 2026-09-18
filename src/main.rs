@@ -5,7 +5,7 @@ mod input;
 mod output;
 mod setup;
 
-use std::{env, path::Path, process::ExitCode};
+use std::{env, path::Path, process::ExitCode, time::Instant};
 
 use anyhow::Result;
 use clap::Parser;
@@ -15,7 +15,7 @@ use client::{Client, Message};
 
 fn main() -> Result<ExitCode> {
     let cli = Cli::parse();
-    let json = cli.global.json && matches!(cli.command, Command::Memory(_));
+    let json = cli.global.json && matches!(cli.command, Command::Memory(_) | Command::Status);
     match run(cli) {
         Err(error) if json => {
             println!("{}", output::pretty(&output::error(&error)));
@@ -31,6 +31,7 @@ fn run(cli: Cli) -> Result<()> {
         Command::Memory(command) => memory_command(&path, cli.global, command),
         Command::Config(command) => config_command(&path, command),
         Command::Setup => setup::run(&path),
+        Command::Status => status_command(&path, cli.global),
     }
 }
 
@@ -66,6 +67,23 @@ fn memory_command(path: &Path, global: GlobalArgs, command: MemoryCommand) -> Re
         println!("{}", output::pretty(&response));
     } else {
         println!("{}", output::render(&response, empty));
+    }
+    Ok(())
+}
+
+fn status_command(path: &Path, global: GlobalArgs) -> Result<()> {
+    let json = global.json;
+    let settings = config::resolve(global, config::load(path)?)?;
+    let client = Client::new(&settings.url, settings.api_key)?;
+    let start = Instant::now();
+    let error = client.me().err();
+    let latency = start.elapsed();
+    if json {
+        let status = output::status(&settings.url, error.as_ref());
+        println!("{}", output::pretty(&status));
+    } else {
+        let status = output::render_status(&settings.url, error.as_ref(), latency);
+        println!("{status}");
     }
     Ok(())
 }
