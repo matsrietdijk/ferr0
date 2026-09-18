@@ -42,6 +42,8 @@ pub struct GlobalArgs {
 pub enum Command {
     #[command(flatten)]
     Memory(MemoryCommand),
+    #[command(subcommand, about = "Manage users, agents and runs")]
+    Entity(EntityCommand),
     #[command(subcommand, about = "Manage the config file")]
     Config(ConfigCommand),
     #[command(about = "Interactively configure ferr0 and install the agent skill")]
@@ -104,6 +106,38 @@ pub struct DeleteArgs {
     pub dry_run: bool,
     #[arg(long, help = "Skip confirmation")]
     pub force: bool,
+}
+
+#[derive(Subcommand)]
+pub enum EntityCommand {
+    #[command(about = "List all entities of a given type")]
+    List { kind: EntityKind },
+    #[command(
+        about = "Delete an entity and ALL its memories, given by --user-id, --agent-id or --run-id"
+    )]
+    Delete {
+        #[arg(long, help = "Show what would be deleted without deleting")]
+        dry_run: bool,
+        #[arg(long, help = "Skip confirmation")]
+        force: bool,
+    },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum EntityKind {
+    Users,
+    Agents,
+    Runs,
+}
+
+impl EntityKind {
+    pub fn singular(self) -> &'static str {
+        match self {
+            Self::Users => "user",
+            Self::Agents => "agent",
+            Self::Runs => "run",
+        }
+    }
 }
 
 #[derive(Subcommand)]

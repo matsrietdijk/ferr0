@@ -191,6 +191,14 @@ impl Client {
         self.send(self.http.delete(url))
     }
 
+    pub fn entities(&self) -> Result<Value> {
+        self.send(self.http.get(self.endpoint(&["entities"])))
+    }
+
+    pub fn delete_entity(&self, kind: &str, id: &str) -> Result<Value> {
+        self.send(self.http.delete(self.endpoint(&["entities", kind, id])))
+    }
+
     fn endpoint(&self, segments: &[&str]) -> Url {
         let mut url = self.base.clone();
         url.path_segments_mut()

@@ -8,18 +8,18 @@ mod setup;
 
 use std::{path::Path, process::ExitCode};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Parser;
 
-use cli::{Cli, Command, ConfigCommand, DeleteArgs, GlobalArgs, MemoryCommand};
+use cli::{Cli, Command, ConfigCommand, DeleteArgs, EntityCommand, GlobalArgs, MemoryCommand};
 use client::{Client, Message, SERVER_LIST_LIMIT, Scope};
-use serde_json::Value;
+use serde_json::{Map, Value, json};
 
 const DRY_RUN_NOTE: &str = "No changes made (dry run).";
 
 fn main() -> Result<ExitCode> {
     let cli = Cli::parse();
-    let json = cli.global.json && matches!(cli.command, Command::Memory(_));
+    let json = cli.global.json && matches!(cli.command, Command::Memory(_) | Command::Entity(_));
     match run(cli) {
         Err(error) if json => {
             println!("{}", output::pretty(&output::error(&error)));
@@ -33,6 +33,7 @@ fn run(cli: Cli) -> Result<()> {
     let path = config::default_path()?;
     match cli.command {
         Command::Memory(command) => memory_command(&path, cli.global, command),
+        Command::Entity(command) => entity_command(&path, cli.global, command),
         Command::Config(command) => config_command(&path, command),
         Command::Setup => setup::run(&path),
     }
@@ -121,6 +122,69 @@ fn delete_command(client: &Client, scope: &Scope, json: bool, args: DeleteArgs) 
         &client.delete_all(scope)?,
         "All matching memories deleted",
     )
+}
+
+fn entity_command(path: &Path, global: GlobalArgs, command: EntityCommand) -> Result<()> {
+    let json = global.json;
+    let entities: Vec<_> = [
+        ("user", global.user_id.clone()),
+        ("agent", global.agent_id.clone()),
+        ("run", global.run_id.clone()),
+    ]
+    .into_iter()
+    .filter_map(|(kind, id)| id.filter(|id| !id.is_empty()).map(|id| (kind, id)))
+    .collect();
+    let settings = config::resolve(global, config::load(path)?)?;
+    let client = Client::new(&settings.url, settings.api_key)?;
+    match command {
+        EntityCommand::List { kind } => {
+            let Value::Array(mut listed) = client.entities()? else {
+                bail!("unexpected response from the entities endpoint");
+            };
+            listed.retain(|entity| entity["type"] == kind.singular());
+            if json {
+                println!("{}", output::pretty(&Value::Array(listed)));
+            } else {
+                println!("{}", output::render_entities(&listed, kind.singular()));
+            }
+        }
+        EntityCommand::Delete { dry_run, force } => {
+            confirm::require_force_for_json(force, json)?;
+            if entities.is_empty() {
+                bail!("Provide at least one of --user-id, --agent-id, --run-id.");
+            }
+            let scope: Vec<_> = entities
+                .iter()
+                .map(|(kind, id)| format!("{kind}={id}"))
+                .collect();
+            let scope = scope.join(", ");
+            if dry_run {
+                let message = format!("Would delete entity {scope} and all its memories.");
+                if json {
+                    println!("{}", output::pretty(&json!({ "message": message })));
+                } else {
+                    println!("{message}\n{DRY_RUN_NOTE}");
+                }
+                return Ok(());
+            }
+            let prompt =
+                format!("Delete entity {scope} AND all its memories? This cannot be undone.");
+            if !confirm::confirm(&prompt, force)? {
+                println!("Cancelled.");
+                return Ok(());
+            }
+            let mut deleted = Map::new();
+            for (kind, id) in &entities {
+                deleted.insert(kind.to_string(), client.delete_entity(kind, id)?);
+            }
+            print_done(
+                json,
+                &Value::Object(deleted),
+                "Entity deleted with all memories",
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn print_done(json: bool, response: &Value, message: &str) -> Result<()> {

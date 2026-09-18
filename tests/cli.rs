@@ -206,13 +206,135 @@ fn delete_dry_run_shows_the_memory_without_deleting() {
 }
 
 #[test]
-fn delete_all_without_force_fails_when_stdin_is_not_a_terminal() {
+fn destructive_commands_without_force_fail_when_stdin_is_not_a_terminal() {
     let mut server = Server::new();
     let delete = never(&mut server, "DELETE");
 
-    let run = ferr0(&server, &["delete", "--all", "--user-id", "alice"]);
+    for args in [
+        &["delete", "--all", "--user-id", "alice"][..],
+        &["entity", "delete", "--user-id", "alice"],
+    ] {
+        let run = ferr0(&server, args);
+
+        assert!(!run.output.status.success());
+        assert!(run.stderr().contains("pass --force to confirm"));
+    }
+    delete.assert();
+}
+
+#[test]
+fn entity_list_filters_by_type() {
+    let mut server = Server::new();
+    server
+        .mock("GET", "/entities")
+        .with_body(
+            json!([
+                {"id": "alice", "type": "user", "total_memories": 3},
+                {"id": "claude-code", "type": "agent", "total_memories": 1},
+            ])
+            .to_string(),
+        )
+        .create();
+
+    let run = ferr0(&server, &["--json", "entity", "list", "agents"]);
+
+    assert!(run.output.status.success(), "{}", run.stderr());
+    assert_eq!(
+        run.json(),
+        json!([{"id": "claude-code", "type": "agent", "total_memories": 1}])
+    );
+}
+
+#[test]
+fn entity_delete_deletes_each_given_entity_with_force() {
+    let mut server = Server::new();
+    let user = server
+        .mock("DELETE", "/entities/user/alice")
+        .with_body(r#"{"message": "Entity deleted"}"#)
+        .create();
+    let agent = server
+        .mock("DELETE", "/entities/agent/claude-code")
+        .with_body(r#"{"message": "Entity deleted"}"#)
+        .create();
+
+    let run = ferr0(
+        &server,
+        &[
+            "--json",
+            "entity",
+            "delete",
+            "--user-id",
+            "alice",
+            "--agent-id",
+            "claude-code",
+            "--force",
+        ],
+    );
+
+    user.assert();
+    agent.assert();
+    assert_eq!(
+        run.json(),
+        json!({
+            "user": {"message": "Entity deleted"},
+            "agent": {"message": "Entity deleted"},
+        })
+    );
+}
+
+#[test]
+fn entity_delete_needs_an_entity_flag() {
+    let mut server = Server::new();
+    let delete = never(&mut server, "DELETE");
+
+    let run = ferr0(&server, &["entity", "delete", "--force"]);
 
     delete.assert();
     assert!(!run.output.status.success());
-    assert!(run.stderr().contains("pass --force to confirm"));
+    assert!(
+        run.stderr()
+            .contains("Provide at least one of --user-id, --agent-id, --run-id.")
+    );
+}
+
+#[test]
+fn entity_delete_dry_run_makes_no_request() {
+    let mut server = Server::new();
+    let delete = never(&mut server, "DELETE");
+
+    let run = ferr0(
+        &server,
+        &["entity", "delete", "--run-id", "r1", "--dry-run"],
+    );
+
+    delete.assert();
+    assert_eq!(
+        run.stdout(),
+        "Would delete entity run=r1 and all its memories.\nNo changes made (dry run).\n"
+    );
+}
+
+#[test]
+fn entity_delete_dry_run_prints_json_with_json() {
+    let mut server = Server::new();
+    let delete = never(&mut server, "DELETE");
+
+    let run = ferr0(
+        &server,
+        &[
+            "--json",
+            "entity",
+            "delete",
+            "--user-id",
+            "alice",
+            "--dry-run",
+            "--force",
+        ],
+    );
+
+    delete.assert();
+    assert_eq!(
+        run.json(),
+        json!({"message": "Would delete entity user=alice and all its memories."})
+    );
 }
