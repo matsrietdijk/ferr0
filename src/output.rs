@@ -22,6 +22,17 @@ pub fn render(response: &Value, empty: &str) -> String {
     pretty(response)
 }
 
+pub fn render_entities(entities: &[Value], kind: &str) -> String {
+    if entities.is_empty() {
+        return format!("No {kind}s found.");
+    }
+    entities
+        .iter()
+        .map(render_entity)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub fn pretty(response: &Value) -> String {
     serde_json::to_string_pretty(response).unwrap_or_else(|_| response.to_string())
 }
@@ -46,6 +57,12 @@ fn render_memory(memory: &Value) -> String {
     parts.push(text("id").unwrap_or("-").to_string());
     parts.push(text("memory").unwrap_or_default().to_string());
     parts.join("  ")
+}
+
+fn render_entity(entity: &Value) -> String {
+    let text = |key| entity.get(key).and_then(Value::as_str);
+    let created = text("created_at").map_or("—", |created| created.get(..10).unwrap_or(created));
+    format!("{}  {created}", text("id").unwrap_or("—"))
 }
 
 #[cfg(test)]
@@ -89,6 +106,24 @@ mod tests {
     #[test]
     fn renders_unknown_shapes_as_json() {
         assert_eq!(render(&json!({"id": "1"}), ""), "{\n  \"id\": \"1\"\n}");
+    }
+
+    #[test]
+    fn renders_one_line_per_entity_with_its_created_date() {
+        let entities = [
+            json!({"id": "alice", "type": "user", "created_at": "2026-09-01T10:00:00Z"}),
+            json!({"id": "bob", "type": "user", "created_at": null}),
+        ];
+
+        assert_eq!(
+            render_entities(&entities, "user"),
+            "alice  2026-09-01\nbob  —"
+        );
+    }
+
+    #[test]
+    fn renders_no_entities_with_the_type() {
+        assert_eq!(render_entities(&[], "agent"), "No agents found.");
     }
 
     #[test]

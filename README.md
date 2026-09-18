@@ -26,7 +26,15 @@ ferr0 list
 ferr0 get <memory-id>
 ferr0 update <memory-id> "Prefers black coffee"
 ferr0 delete <memory-id>
+ferr0 delete <memory-id> --dry-run
+ferr0 delete --all --user-id alice --dry-run
+ferr0 delete --all --user-id alice
+ferr0 entity list users
+ferr0 entity delete --agent-id <agent-id>
+ferr0 reset
 ```
+
+`delete --all` deletes every memory in the scope, `entity delete` deletes an entity with all its memories, and `reset` deletes every memory on the server. They ask for confirmation unless you pass `--force`, and `reset` asks you to type `reset`; with `--json` or without a terminal they fail without `--force`. `--dry-run` on `delete` and `entity delete` shows what would be deleted without deleting. `entity delete` deletes only the entities given as `--user-id`, `--agent-id`, or `--run-id` on the command line, and `reset` rejects those flags; both ignore `FERR0_*` variables and the config file.
 
 Settings resolve in order: flags (`--url`, `--api-key`, `--user-id`, `--agent-id`, `--run-id`), then `FERR0_*` environment variables, then `$XDG_CONFIG_HOME/ferr0/config.toml` (default `~/.config`). Add `--json` to print the raw server response, or on failure `{"error": {"message": "...", "status": 401}}` on stdout, where `status` is only present for server errors.
 

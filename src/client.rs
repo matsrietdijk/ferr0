@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+pub const SERVER_LIST_LIMIT: usize = 1000;
 
 #[derive(Debug)]
 pub struct ServerError {
@@ -51,6 +52,23 @@ impl Scope {
 
     fn is_empty(&self) -> bool {
         self.pairs().next().is_none()
+    }
+
+    fn ids(&self) -> impl Iterator<Item = (&'static str, &str)> {
+        self.pairs().filter(|(_, value)| !value.is_empty())
+    }
+}
+
+impl fmt::Display for Scope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let pairs: Vec<_> = self
+            .ids()
+            .map(|(key, value)| format!("{}={value}", key.trim_end_matches("_id")))
+            .collect();
+        if pairs.is_empty() {
+            return f.write_str("ALL entities");
+        }
+        f.write_str(&pairs.join(", "))
     }
 }
 
@@ -155,6 +173,34 @@ impl Client {
 
     pub fn delete(&self, id: &str) -> Result<Value> {
         self.send(self.http.delete(self.endpoint(&["memories", id])))
+    }
+
+    pub fn list_deletable(&self, scope: &Scope) -> Result<Value> {
+        let limit = SERVER_LIST_LIMIT.to_string();
+        let mut url = self.endpoint(&["memories"]);
+        url.query_pairs_mut()
+            .extend_pairs(scope.ids())
+            .append_pair("top_k", &limit)
+            .append_pair("show_expired", "true");
+        self.send(self.http.get(url))
+    }
+
+    pub fn delete_all(&self, scope: &Scope) -> Result<Value> {
+        let mut url = self.endpoint(&["memories"]);
+        url.query_pairs_mut().extend_pairs(scope.ids());
+        self.send(self.http.delete(url))
+    }
+
+    pub fn reset(&self) -> Result<Value> {
+        self.send(self.http.post(self.endpoint(&["reset"])))
+    }
+
+    pub fn entities(&self) -> Result<Value> {
+        self.send(self.http.get(self.endpoint(&["entities"])))
+    }
+
+    pub fn delete_entity(&self, kind: &str, id: &str) -> Result<Value> {
+        self.send(self.http.delete(self.endpoint(&["entities", kind, id])))
     }
 
     fn endpoint(&self, segments: &[&str]) -> Url {

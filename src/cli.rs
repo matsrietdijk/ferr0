@@ -42,6 +42,8 @@ pub struct GlobalArgs {
 pub enum Command {
     #[command(flatten)]
     Memory(MemoryCommand),
+    #[command(subcommand, about = "Manage users, agents and runs")]
+    Entity(EntityCommand),
     #[command(subcommand, about = "Manage the config file")]
     Config(ConfigCommand),
     #[command(about = "Interactively configure ferr0 and install the agent skill")]
@@ -83,8 +85,64 @@ pub enum MemoryCommand {
     Get { id: String },
     #[command(about = "Replace the text of a memory")]
     Update { id: String, text: String },
-    #[command(about = "Delete a memory")]
-    Delete { id: String },
+    #[command(about = "Delete a memory or all memories matching scope filters")]
+    Delete(DeleteArgs),
+    #[command(about = "Delete every memory on the server")]
+    Reset {
+        #[arg(long, help = "Skip confirmation")]
+        force: bool,
+    },
+}
+
+#[derive(Args)]
+pub struct DeleteArgs {
+    #[arg(
+        required_unless_present = "all",
+        help = "Memory ID to delete (omit when using --all)"
+    )]
+    pub id: Option<String>,
+    #[arg(
+        long,
+        conflicts_with = "id",
+        help = "Delete all memories matching scope filters"
+    )]
+    pub all: bool,
+    #[arg(long, help = "Show what would be deleted without deleting")]
+    pub dry_run: bool,
+    #[arg(long, help = "Skip confirmation")]
+    pub force: bool,
+}
+
+#[derive(Subcommand)]
+pub enum EntityCommand {
+    #[command(about = "List all entities of a given type")]
+    List { kind: EntityKind },
+    #[command(
+        about = "Delete an entity and ALL its memories, given by --user-id, --agent-id or --run-id"
+    )]
+    Delete {
+        #[arg(long, help = "Show what would be deleted without deleting")]
+        dry_run: bool,
+        #[arg(long, help = "Skip confirmation")]
+        force: bool,
+    },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum EntityKind {
+    Users,
+    Agents,
+    Runs,
+}
+
+impl EntityKind {
+    pub fn singular(self) -> &'static str {
+        match self {
+            Self::Users => "user",
+            Self::Agents => "agent",
+            Self::Runs => "run",
+        }
+    }
 }
 
 #[derive(Subcommand)]
