@@ -36,6 +36,8 @@ Always add `--json` and read the response as JSON.
 | Show one memory | `ferr0 --json get <memory-id>` |
 | Replace a memory's text | `ferr0 --json update <memory-id> "<text>"` |
 | Delete a memory | `ferr0 --json delete <memory-id>` |
+| Preview deleting every memory in the scope | `ferr0 --json delete --all --dry-run --force` |
+| Delete every memory in the scope | `ferr0 --json delete --all --force` |
 
 `add` and `search` read the text or query from stdin when it is omitted and input is piped, for example `printf '%s' "<text>" | ferr0 --json add --agent-id <id>`, which avoids shell quoting problems.
 
@@ -50,7 +52,7 @@ printf '%s' '[{"role": "user", "content": "<request>"}, {"role": "assistant", "c
 - `assistant`: something you did or said, such as a recommendation, a decision, or information you researched.
 - Include the user message the assistant message responds to when the assistant message does not stand on its own.
 
-`add`, `search`, and `list` return `{"results": [...]}`. Each result has an `id` and `memory`, and stored memories have an `attributed_to` of `user` or `assistant` that tells whose statement the memory came from; search results also have a `score`, and add results have an `event` (`ADD`, `UPDATE`, `DELETE`, or `NONE`). `get` returns a single memory object with `id` and `memory`. `update` and `delete` return `{"message": "..."}`.
+`add`, `search`, and `list` return `{"results": [...]}`. Each result has an `id` and `memory`, and stored memories have an `attributed_to` of `user` or `assistant` that tells whose statement the memory came from; search results also have a `score`, and add results have an `event` (`ADD`, `UPDATE`, `DELETE`, or `NONE`). `get` returns a single memory object with `id` and `memory`. `update` and `delete` return `{"message": "..."}`. `delete --dry-run` returns what `get` or `list` would, without deleting.
 
 ## Working with memories
 
@@ -59,6 +61,7 @@ printf '%s' '[{"role": "user", "content": "<request>"}, {"role": "assistant", "c
 - Do not store secrets, credentials, or sensitive personal data unless the user explicitly asks.
 - Only `update` or `delete` memory ids returned by `search` or `list`, with the same user id, so every change stays within that user. The memory may have been stored by any agent.
 - Deletion cannot be undone. Confirm with the user before deleting unless they asked for that specific deletion.
+- `delete --all` needs `--force` with `--json`, even with `--dry-run`, which still deletes nothing. Before deleting, preview with `delete --all --dry-run`, show the user what will be deleted, and get their explicit confirmation. `delete --all` deletes the whole configured user scope unless you narrow it.
 
 ## Failures
 

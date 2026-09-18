@@ -1,6 +1,7 @@
 mod cli;
 mod client;
 mod config;
+mod confirm;
 mod input;
 mod output;
 mod setup;
@@ -10,8 +11,11 @@ use std::{path::Path, process::ExitCode};
 use anyhow::Result;
 use clap::Parser;
 
-use cli::{Cli, Command, ConfigCommand, GlobalArgs, MemoryCommand};
-use client::{Client, Message};
+use cli::{Cli, Command, ConfigCommand, DeleteArgs, GlobalArgs, MemoryCommand};
+use client::{Client, Message, SERVER_LIST_LIMIT, Scope};
+use serde_json::Value;
+
+const DRY_RUN_NOTE: &str = "No changes made (dry run).";
 
 fn main() -> Result<ExitCode> {
     let cli = Cli::parse();
@@ -60,12 +64,70 @@ fn memory_command(path: &Path, global: GlobalArgs, command: MemoryCommand) -> Re
         MemoryCommand::List { limit } => (client.list(scope, limit)?, not_found),
         MemoryCommand::Get { id } => (client.get(&id)?, ""),
         MemoryCommand::Update { id, text } => (client.update(&id, &text)?, ""),
-        MemoryCommand::Delete { id } => (client.delete(&id)?, ""),
+        MemoryCommand::Delete(args) => return delete_command(&client, scope, json, args),
     };
     if json {
         println!("{}", output::pretty(&response));
     } else {
         println!("{}", output::render(&response, empty));
+    }
+    Ok(())
+}
+
+fn delete_command(client: &Client, scope: &Scope, json: bool, args: DeleteArgs) -> Result<()> {
+    let DeleteArgs {
+        id, dry_run, force, ..
+    } = args;
+    if let Some(id) = id {
+        let response = if dry_run {
+            client.get(&id)?
+        } else {
+            client.delete(&id)?
+        };
+        if json {
+            println!("{}", output::pretty(&response));
+        } else {
+            println!("{}", output::render(&response, ""));
+            if dry_run {
+                println!("{DRY_RUN_NOTE}");
+            }
+        }
+        return Ok(());
+    }
+    confirm::require_force_for_json(force, json)?;
+    if dry_run {
+        let response = client.list_deletable(scope)?;
+        let count = response["results"].as_array().map_or(0, Vec::len);
+        if count >= SERVER_LIST_LIMIT {
+            eprintln!(
+                "Counted the first {SERVER_LIST_LIMIT} memories; delete --all also deletes any others in the scope."
+            );
+        }
+        if json {
+            println!("{}", output::pretty(&response));
+        } else {
+            let noun = if count == 1 { "memory" } else { "memories" };
+            println!("Would delete {count} {noun}.\n{DRY_RUN_NOTE}");
+        }
+        return Ok(());
+    }
+    let prompt = format!("Delete ALL memories for {scope}? This cannot be undone.");
+    if !confirm::confirm(&prompt, force)? {
+        println!("Cancelled.");
+        return Ok(());
+    }
+    print_done(
+        json,
+        &client.delete_all(scope)?,
+        "All matching memories deleted",
+    )
+}
+
+fn print_done(json: bool, response: &Value, message: &str) -> Result<()> {
+    if json {
+        println!("{}", output::pretty(response));
+    } else {
+        println!("{message}");
     }
     Ok(())
 }

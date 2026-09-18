@@ -83,8 +83,27 @@ pub enum MemoryCommand {
     Get { id: String },
     #[command(about = "Replace the text of a memory")]
     Update { id: String, text: String },
-    #[command(about = "Delete a memory")]
-    Delete { id: String },
+    #[command(about = "Delete a memory or all memories matching scope filters")]
+    Delete(DeleteArgs),
+}
+
+#[derive(Args)]
+pub struct DeleteArgs {
+    #[arg(
+        required_unless_present = "all",
+        help = "Memory ID to delete (omit when using --all)"
+    )]
+    pub id: Option<String>,
+    #[arg(
+        long,
+        conflicts_with = "id",
+        help = "Delete all memories matching scope filters"
+    )]
+    pub all: bool,
+    #[arg(long, help = "Show what would be deleted without deleting")]
+    pub dry_run: bool,
+    #[arg(long, help = "Skip confirmation")]
+    pub force: bool,
 }
 
 #[derive(Subcommand)]

@@ -26,7 +26,12 @@ ferr0 list
 ferr0 get <memory-id>
 ferr0 update <memory-id> "Prefers black coffee"
 ferr0 delete <memory-id>
+ferr0 delete <memory-id> --dry-run
+ferr0 delete --all --user-id alice --dry-run
+ferr0 delete --all --user-id alice
 ```
+
+`delete --all` deletes every memory in the scope. It asks for confirmation unless you pass `--force`; with `--json` or without a terminal it fails without `--force`. `--dry-run` shows what would be deleted without deleting.
 
 Settings resolve in order: flags (`--url`, `--api-key`, `--user-id`, `--agent-id`, `--run-id`), then `FERR0_*` environment variables, then `$XDG_CONFIG_HOME/ferr0/config.toml` (default `~/.config`). Add `--json` to print the raw server response, or on failure `{"error": {"message": "...", "status": 401}}` on stdout, where `status` is only present for server errors.
 
