@@ -73,11 +73,28 @@ pub enum MemoryCommand {
         query: Option<String>,
         #[arg(long, help = "Maximum number of results")]
         limit: Option<u32>,
+        #[arg(
+            long,
+            default_value_t = 0.3,
+            allow_hyphen_values = true,
+            help = "Minimum similarity score"
+        )]
+        threshold: f64,
+        #[arg(
+            long,
+            value_name = "JSON",
+            help = "Extra filters as a JSON object, merged with the scope; a top-level AND or OR replaces the scope"
+        )]
+        filter: Option<String>,
+        #[arg(long, help = "Include expired memories")]
+        show_expired: bool,
     },
     #[command(about = "List memories")]
     List {
         #[arg(long, help = "Maximum number of results")]
         limit: Option<u32>,
+        #[arg(long, help = "Include expired memories")]
+        show_expired: bool,
     },
     #[command(about = "Show a memory")]
     Get { id: String },
@@ -100,4 +117,18 @@ pub enum ConfigKey {
     Url,
     ApiKey,
     UserId,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_a_negative_threshold_for_range_validation() {
+        let cli = Cli::try_parse_from(["ferr0", "search", "x", "--threshold", "-0.1"]).unwrap();
+        let Command::Memory(MemoryCommand::Search { threshold, .. }) = cli.command else {
+            panic!("expected search");
+        };
+        assert_eq!(threshold, -0.1);
+    }
 }

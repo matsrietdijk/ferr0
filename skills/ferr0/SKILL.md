@@ -31,11 +31,13 @@ Always add `--json` and read the response as JSON.
 | --- | --- |
 | Store a fact | `ferr0 --json add --agent-id <id> "<text>"` |
 | Store messages with roles | `ferr0 --json add --agent-id <id> --messages '<json>'` |
-| Find relevant memories | `ferr0 --json search "<query>" [--limit N]` |
-| List stored memories | `ferr0 --json list [--limit N]` |
+| Find relevant memories | `ferr0 --json search "<query>" [--limit N] [--threshold S] [--filter '<json>'] [--show-expired]` |
+| List stored memories | `ferr0 --json list [--limit N] [--show-expired]` |
 | Show one memory | `ferr0 --json get <memory-id>` |
 | Replace a memory's text | `ferr0 --json update <memory-id> "<text>"` |
 | Delete a memory | `ferr0 --json delete <memory-id>` |
+
+`search --threshold` drops results scoring below `S` (0.0 to 1.0, default 0.3). `--filter` takes a JSON object of extra Mem0 filters merged with the scope; it cannot repeat a `user_id`, `agent_id`, or `run_id` the scope already sets. A filter with a top-level `AND` or `OR` replaces the scope, so include the user id in it yourself. Expired memories are hidden unless `--show-expired` is given.
 
 `add` and `search` read the text or query from stdin when it is omitted and input is piped, for example `printf '%s' "<text>" | ferr0 --json add --agent-id <id>`, which avoids shell quoting problems.
 

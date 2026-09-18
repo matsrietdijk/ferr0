@@ -11,7 +11,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use cli::{Cli, Command, ConfigCommand, GlobalArgs, MemoryCommand};
-use client::{Client, Message};
+use client::{Client, Message, SearchOptions};
 
 fn main() -> Result<ExitCode> {
     let cli = Cli::parse();
@@ -53,11 +53,30 @@ fn memory_command(path: &Path, global: GlobalArgs, command: MemoryCommand) -> Re
             };
             (client.add(&messages, scope)?, "No memories added.")
         }
-        MemoryCommand::Search { query, limit } => {
+        MemoryCommand::Search {
+            query,
+            limit,
+            threshold,
+            filter,
+            show_expired,
+        } => {
+            let filter = filter
+                .map(|json| input::parse_object(&json, "--filter"))
+                .transpose()?
+                .unwrap_or_default();
             let query = input::from_arg_or_stdin(query, "query")?;
-            (client.search(&query, scope, limit)?, not_found)
+            let options = SearchOptions {
+                limit,
+                threshold,
+                filter,
+                show_expired,
+            };
+            (client.search(&query, scope, options)?, not_found)
         }
-        MemoryCommand::List { limit } => (client.list(scope, limit)?, not_found),
+        MemoryCommand::List {
+            limit,
+            show_expired,
+        } => (client.list(scope, limit, show_expired)?, not_found),
         MemoryCommand::Get { id } => (client.get(&id)?, ""),
         MemoryCommand::Update { id, text } => (client.update(&id, &text)?, ""),
         MemoryCommand::Delete { id } => (client.delete(&id)?, ""),

@@ -101,7 +101,7 @@ mod tests {
             .create();
 
         let client = Client::new(&server.url(), None).unwrap();
-        let error = client.list(&Scope::default(), None).unwrap_err();
+        let error = client.list(&Scope::default(), None, false).unwrap_err();
 
         assert_eq!(
             super::error(&error),

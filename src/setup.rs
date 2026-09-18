@@ -130,7 +130,7 @@ fn verify(config: &FileConfig) -> Result<()> {
                 .downcast_ref::<ServerError>()
                 .is_some_and(|error| error.status == StatusCode::NOT_FOUND) =>
         {
-            client.list(&scope, Some(1)).map(drop)
+            client.list(&scope, Some(1), false).map(drop)
         }
         result => result.map(drop),
     }
