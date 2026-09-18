@@ -5,17 +5,31 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
+use chrono::{Local, NaiveDate};
+use serde_json::Value;
 
 use crate::client::Message;
 
 pub fn from_arg_or_stdin(arg: Option<String>, name: &str) -> Result<String> {
+    resolve(arg, piped_stdin(), name)
+}
+
+pub fn optional_from_arg_or_stdin(arg: Option<String>) -> Result<Option<String>> {
+    read(arg, piped_stdin())
+}
+
+fn piped_stdin() -> Option<impl Read> {
     let stdin = io::stdin();
-    let piped = (!stdin.is_terminal()).then(|| stdin.lock());
-    resolve(arg, piped, name)
+    (!stdin.is_terminal()).then(|| stdin.lock())
 }
 
 fn resolve(arg: Option<String>, piped: Option<impl Read>, name: &str) -> Result<String> {
-    if let Some(arg) = arg {
+    read(arg, piped)?
+        .with_context(|| format!("no {name} given: pass it as an argument or pipe it on stdin"))
+}
+
+fn read(arg: Option<String>, piped: Option<impl Read>) -> Result<Option<String>> {
+    if arg.is_some() {
         return Ok(arg);
     }
     let mut text = String::new();
@@ -25,10 +39,7 @@ fn resolve(arg: Option<String>, piped: Option<impl Read>, name: &str) -> Result<
             .context("cannot read from stdin")?;
     }
     let text = text.trim();
-    if text.is_empty() {
-        bail!("no {name} given: pass it as an argument or pipe it on stdin");
-    }
-    Ok(text.to_string())
+    Ok((!text.is_empty()).then(|| text.to_string()))
 }
 
 pub fn messages_from_file(path: &Path) -> Result<Vec<Message>> {
@@ -44,6 +55,49 @@ pub fn parse_messages(json: &str) -> Result<Vec<Message>> {
         bail!("no messages given: the messages array is empty");
     }
     Ok(messages)
+}
+
+pub fn parse_metadata(json: Option<&str>) -> Result<Option<Value>> {
+    let Some(json) = json.filter(|json| !json.is_empty()) else {
+        return Ok(None);
+    };
+    let metadata = serde_json::from_str(json).context("invalid JSON in --metadata")?;
+    Ok(non_empty(metadata))
+}
+
+pub fn non_empty(value: Value) -> Option<Value> {
+    let empty = match &value {
+        Value::Null => true,
+        Value::Bool(value) => !value,
+        Value::Number(value) => value.as_f64() == Some(0.0),
+        Value::String(value) => value.is_empty(),
+        Value::Array(value) => value.is_empty(),
+        Value::Object(value) => value.is_empty(),
+    };
+    (!empty).then_some(value)
+}
+
+pub fn parse_expires(date: Option<&str>) -> Result<Option<String>> {
+    let Some(date) = date.filter(|date| !date.is_empty()) else {
+        return Ok(None);
+    };
+    validate_expires(date, Local::now().date_naive())?;
+    Ok(Some(date.to_string()))
+}
+
+fn validate_expires(date: &str, today: NaiveDate) -> Result<()> {
+    let digits = date.len() == 10
+        && date.bytes().enumerate().all(|(index, byte)| {
+            matches!(index, 4 | 7) == (byte == b'-') && (byte == b'-' || byte.is_ascii_digit())
+        });
+    let date = digits
+        .then(|| NaiveDate::parse_from_str(date, "%Y-%m-%d").ok())
+        .flatten()
+        .context("invalid date format for --expires: use YYYY-MM-DD (e.g. 2025-12-31)")?;
+    if date <= today {
+        bail!("--expires date must be in the future");
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -107,5 +161,82 @@ mod tests {
             error.to_string(),
             "no messages given: the messages array is empty"
         );
+    }
+
+    #[test]
+    fn reads_nothing_without_an_argument_or_piped_input() {
+        assert_eq!(read(None, Some(" \n".as_bytes())).unwrap(), None);
+        assert_eq!(read(None, None::<&[u8]>).unwrap(), None);
+    }
+
+    #[test]
+    fn parses_any_json_metadata() {
+        assert_eq!(
+            parse_metadata(Some(r#"{"topic": "tools"}"#)).unwrap(),
+            Some(serde_json::json!({"topic": "tools"}))
+        );
+        assert_eq!(
+            parse_metadata(Some("[1]")).unwrap(),
+            Some(serde_json::json!([1]))
+        );
+    }
+
+    #[test]
+    fn drops_empty_metadata() {
+        for json in ["{}", "[]", "\"\"", "null", "false", "0"] {
+            assert_eq!(parse_metadata(Some(json)).unwrap(), None, "{json}");
+        }
+    }
+
+    #[test]
+    fn omits_empty_flag_values() {
+        assert_eq!(parse_metadata(Some("")).unwrap(), None);
+        assert_eq!(parse_expires(Some("")).unwrap(), None);
+    }
+
+    #[test]
+    fn rejects_malformed_metadata() {
+        let error = parse_metadata(Some("{topic: tools}")).unwrap_err();
+        assert_eq!(error.to_string(), "invalid JSON in --metadata");
+    }
+
+    fn today() -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, 9, 18).unwrap()
+    }
+
+    #[test]
+    fn accepts_future_calendar_dates() {
+        for date in ["2026-09-19", "2028-02-29"] {
+            assert!(validate_expires(date, today()).is_ok(), "{date}");
+        }
+    }
+
+    #[test]
+    fn rejects_today_and_past_dates() {
+        for date in ["2026-09-18", "2026-09-17"] {
+            let error = validate_expires(date, today()).unwrap_err();
+            assert_eq!(error.to_string(), "--expires date must be in the future");
+        }
+    }
+
+    #[test]
+    fn rejects_dates_that_are_not_yyyy_mm_dd_calendar_dates() {
+        for date in [
+            "2027-02-29",
+            "2027-04-31",
+            "2027-13-01",
+            "2027-1-01",
+            "2027-01-1x",
+            "+2027-01-01",
+            "2027-01-01T00:00:00",
+            "tomorrow",
+        ] {
+            let error = validate_expires(date, today()).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                "invalid date format for --expires: use YYYY-MM-DD (e.g. 2025-12-31)",
+                "{date}"
+            );
+        }
     }
 }

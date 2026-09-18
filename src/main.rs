@@ -1,6 +1,7 @@
 mod cli;
 mod client;
 mod config;
+mod import;
 mod input;
 mod output;
 mod setup;
@@ -11,7 +12,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use cli::{Cli, Command, ConfigCommand, GlobalArgs, MemoryCommand};
-use client::{Client, Message};
+use client::{AddOptions, Changes, Client, Message};
 
 fn main() -> Result<ExitCode> {
     let cli = Cli::parse();
@@ -45,13 +46,24 @@ fn memory_command(path: &Path, global: GlobalArgs, command: MemoryCommand) -> Re
             text,
             messages,
             file,
+            metadata,
+            no_infer,
+            expires,
         } => {
+            let options = AddOptions {
+                metadata: input::parse_metadata(metadata.as_deref())?,
+                infer: no_infer.then_some(false),
+                expiration_date: input::parse_expires(expires.as_deref())?,
+            };
             let messages = match (messages, file) {
                 (Some(json), _) => input::parse_messages(&json)?,
                 (None, Some(file)) => input::messages_from_file(&file)?,
                 (None, None) => vec![Message::user(input::from_arg_or_stdin(text, "text")?)],
             };
-            (client.add(&messages, scope)?, "No memories added.")
+            (
+                client.add(&messages, scope, &options)?,
+                "No memories added.",
+            )
         }
         MemoryCommand::Search { query, limit } => {
             let query = input::from_arg_or_stdin(query, "query")?;
@@ -59,8 +71,30 @@ fn memory_command(path: &Path, global: GlobalArgs, command: MemoryCommand) -> Re
         }
         MemoryCommand::List { limit } => (client.list(scope, limit)?, not_found),
         MemoryCommand::Get { id } => (client.get(&id)?, ""),
-        MemoryCommand::Update { id, text } => (client.update(&id, &text)?, ""),
+        MemoryCommand::Update {
+            id,
+            text,
+            metadata,
+            expires,
+            no_expires,
+        } => {
+            let expires = input::parse_expires(expires.as_deref())?;
+            let changes = Changes {
+                text: input::optional_from_arg_or_stdin(text)?.filter(|text| !text.is_empty()),
+                metadata: input::parse_metadata(metadata.as_deref())?,
+                expiration_date: (expires.is_some() || no_expires).then_some(expires),
+            };
+            (client.update(&id, &changes)?, "")
+        }
         MemoryCommand::Delete { id } => (client.delete(&id)?, ""),
+        MemoryCommand::Import { file } => {
+            let summary = import::from_file(&client, scope, &file)?;
+            if !json {
+                eprintln!("{}", import::render(&summary));
+                return Ok(());
+            }
+            (summary, "")
+        }
     };
     if json {
         println!("{}", output::pretty(&response));
