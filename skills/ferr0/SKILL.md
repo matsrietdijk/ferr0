@@ -30,6 +30,7 @@ Always add `--json` and read the response as JSON.
 | Goal | Command |
 | --- | --- |
 | Store a fact | `ferr0 --json add --agent-id <id> "<text>"` |
+| Store messages with roles | `ferr0 --json add --agent-id <id> --messages '<json>'` |
 | Find relevant memories | `ferr0 --json search "<query>" [--limit N]` |
 | List stored memories | `ferr0 --json list [--limit N]` |
 | Show one memory | `ferr0 --json get <memory-id>` |
@@ -38,7 +39,18 @@ Always add `--json` and read the response as JSON.
 
 `add` and `search` read the text or query from stdin when it is omitted and input is piped, for example `printf '%s' "<text>" | ferr0 --json add --agent-id <id>`, which avoids shell quoting problems.
 
-`add`, `search`, and `list` return `{"results": [...]}`. Each result has an `id` and `memory`; search results also have a `score`, and add results have an `event` (`ADD`, `UPDATE`, `DELETE`, or `NONE`). `get` returns a single memory object with `id` and `memory`. `update` and `delete` return `{"message": "..."}`.
+Text passed to `add` is stored as a message from the user. To record what you said or did, pass `--messages` with a JSON array of `{"role": "...", "content": "..."}` objects, or pipe the array with `--file /dev/stdin`:
+
+```sh
+printf '%s' '[{"role": "user", "content": "<request>"}, {"role": "assistant", "content": "<what you did>"}]' \
+  | ferr0 --json add --agent-id <id> --file /dev/stdin
+```
+
+- `user`: something the user stated, such as a preference, plan, or fact about themselves.
+- `assistant`: something you did or said, such as a recommendation, a decision, or information you researched.
+- Include the user message the assistant message responds to when the assistant message does not stand on its own.
+
+`add`, `search`, and `list` return `{"results": [...]}`. Each result has an `id` and `memory`, and stored memories have an `attributed_to` of `user` or `assistant` that tells whose statement the memory came from; search results also have a `score`, and add results have an `event` (`ADD`, `UPDATE`, `DELETE`, or `NONE`). `get` returns a single memory object with `id` and `memory`. `update` and `delete` return `{"message": "..."}`.
 
 ## Working with memories
 

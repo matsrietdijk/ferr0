@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
@@ -50,8 +52,20 @@ pub enum Command {
 pub enum MemoryCommand {
     #[command(about = "Add a memory")]
     Add {
-        #[arg(help = "Memory text; read from stdin when omitted")]
+        #[arg(help = "Memory text, sent as a user message; read from stdin when omitted")]
         text: Option<String>,
+        #[arg(
+            long,
+            conflicts_with_all = ["text", "file"],
+            help = "Messages as a JSON array of {\"role\", \"content\"} objects"
+        )]
+        messages: Option<String>,
+        #[arg(
+            long,
+            conflicts_with = "text",
+            help = "Read the messages JSON array from a file"
+        )]
+        file: Option<PathBuf>,
     },
     #[command(about = "Search memories")]
     Search {

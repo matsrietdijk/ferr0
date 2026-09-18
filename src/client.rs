@@ -5,7 +5,7 @@ use reqwest::{
     StatusCode, Url,
     blocking::{Client as Http, RequestBuilder},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
@@ -54,15 +54,24 @@ impl Scope {
     }
 }
 
-#[derive(Serialize)]
-struct Message<'a> {
-    role: &'a str,
-    content: &'a str,
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Message {
+    pub role: String,
+    pub content: String,
+}
+
+impl Message {
+    pub fn user(content: String) -> Self {
+        Self {
+            role: "user".into(),
+            content,
+        }
+    }
 }
 
 #[derive(Serialize)]
 struct AddRequest<'a> {
-    messages: [Message<'a>; 1],
+    messages: &'a [Message],
     #[serde(flatten)]
     scope: &'a Scope,
 }
@@ -104,14 +113,8 @@ impl Client {
         })
     }
 
-    pub fn add(&self, text: &str, scope: &Scope) -> Result<Value> {
-        let body = AddRequest {
-            messages: [Message {
-                role: "user",
-                content: text,
-            }],
-            scope,
-        };
+    pub fn add(&self, messages: &[Message], scope: &Scope) -> Result<Value> {
+        let body = AddRequest { messages, scope };
         self.send(self.http.post(self.endpoint(&["memories"])).json(&body))
     }
 
@@ -213,7 +216,9 @@ mod tests {
             .create();
 
         let client = Client::new(&server.url(), Some("secret".into())).unwrap();
-        let response = client.add("likes tea", &user("alice")).unwrap();
+        let response = client
+            .add(&[Message::user("likes tea".into())], &user("alice"))
+            .unwrap();
 
         mock.assert();
         assert_eq!(response, json!({"results": []}));
