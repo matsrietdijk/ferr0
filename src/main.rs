@@ -1,6 +1,7 @@
 mod cli;
 mod client;
 mod config;
+mod import;
 mod input;
 mod output;
 mod setup;
@@ -86,6 +87,14 @@ fn memory_command(path: &Path, global: GlobalArgs, command: MemoryCommand) -> Re
             (client.update(&id, &changes)?, "")
         }
         MemoryCommand::Delete { id } => (client.delete(&id)?, ""),
+        MemoryCommand::Import { file } => {
+            let summary = import::from_file(&client, scope, &file)?;
+            if !json {
+                eprintln!("{}", import::render(&summary));
+                return Ok(());
+            }
+            (summary, "")
+        }
     };
     if json {
         println!("{}", output::pretty(&response));

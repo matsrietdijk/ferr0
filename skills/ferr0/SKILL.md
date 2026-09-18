@@ -36,6 +36,7 @@ Always add `--json` and read the response as JSON.
 | Show one memory | `ferr0 --json get <memory-id>` |
 | Change a memory | `ferr0 --json update <memory-id> ["<text>"] [--metadata '<json>'] [--expires YYYY-MM-DD \| --no-expires]` |
 | Delete a memory | `ferr0 --json delete <memory-id>` |
+| Add many memories from a file | `ferr0 --json import --agent-id <id> <file>` |
 
 `add` and `search` read the text or query from stdin when it is omitted and input is piped, for example `printf '%s' "<text>" | ferr0 --json add --agent-id <id>`, which avoids shell quoting problems.
 
@@ -52,7 +53,7 @@ printf '%s' '[{"role": "user", "content": "<request>"}, {"role": "assistant", "c
 
 `add` also accepts `--metadata '<json>'`, `--expires YYYY-MM-DD` (a future date) for facts that stop being true on a known date, and `--no-infer` to store the text as-is without extracting memories from it. Use `--no-infer` only when the user asks for their exact wording to be stored.
 
-`add`, `search`, and `list` return `{"results": [...]}`. Each result has an `id` and `memory`, and stored memories have an `attributed_to` of `user` or `assistant` that tells whose statement the memory came from; search results also have a `score`, and add results have an `event` (`ADD`, `UPDATE`, `DELETE`, or `NONE`). `get` returns a single memory object with `id` and `memory`. `update` and `delete` return `{"message": "..."}`.
+`add`, `search`, and `list` return `{"results": [...]}`. Each result has an `id` and `memory`, and stored memories have an `attributed_to` of `user` or `assistant` that tells whose statement the memory came from; search results also have a `score`, and add results have an `event` (`ADD`, `UPDATE`, `DELETE`, or `NONE`). `get` returns a single memory object with `id` and `memory`. `update` and `delete` return `{"message": "..."}`. `import` takes a JSON array of strings or `{"memory", "metadata"?}` objects and returns `{"added": N, "failed": N, "results": [...]}` with an `item` number (from 1) and either the add `response` or an `error` for each item; it exits 0 even when items fail, so check `failed`.
 
 ## Working with memories
 

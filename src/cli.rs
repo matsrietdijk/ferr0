@@ -110,6 +110,11 @@ pub enum MemoryCommand {
     },
     #[command(about = "Delete a memory")]
     Delete { id: String },
+    #[command(about = "Add memories from a JSON file, one request per item")]
+    Import {
+        #[arg(help = "JSON file with the memories to add")]
+        file: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
