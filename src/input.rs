@@ -1,6 +1,12 @@
-use std::io::{self, IsTerminal, Read};
+use std::{
+    fs,
+    io::{self, IsTerminal, Read},
+    path::Path,
+};
 
 use anyhow::{Context, Result, bail};
+
+use crate::client::Message;
 
 pub fn from_arg_or_stdin(arg: Option<String>, name: &str) -> Result<String> {
     let stdin = io::stdin();
@@ -23,6 +29,21 @@ fn resolve(arg: Option<String>, piped: Option<impl Read>, name: &str) -> Result<
         bail!("no {name} given: pass it as an argument or pipe it on stdin");
     }
     Ok(text.to_string())
+}
+
+pub fn messages_from_file(path: &Path) -> Result<Vec<Message>> {
+    let json = fs::read_to_string(path)
+        .with_context(|| format!("cannot read messages from {}", path.display()))?;
+    parse_messages(&json)
+}
+
+pub fn parse_messages(json: &str) -> Result<Vec<Message>> {
+    let messages: Vec<Message> = serde_json::from_str(json)
+        .context("messages must be a JSON array of objects with string role and content fields")?;
+    if messages.is_empty() {
+        bail!("no messages given: the messages array is empty");
+    }
+    Ok(messages)
 }
 
 #[cfg(test)]
@@ -53,5 +74,38 @@ mod tests {
     #[test]
     fn rejects_a_missing_argument_on_a_terminal() {
         assert!(resolve(None, None::<&[u8]>, "text").is_err());
+    }
+
+    #[test]
+    fn parses_messages_with_their_roles() {
+        let messages = parse_messages(
+            r#"[{"role": "user", "content": "use pnpm"}, {"role": "assistant", "content": "switched to pnpm"}]"#,
+        )
+        .unwrap();
+        assert_eq!(
+            messages,
+            [
+                Message::user("use pnpm".into()),
+                Message {
+                    role: "assistant".into(),
+                    content: "switched to pnpm".into(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_messages_that_are_not_role_and_content_objects() {
+        assert!(parse_messages(r#"["likes tea"]"#).is_err());
+        assert!(parse_messages(r#"[{"role": "user"}]"#).is_err());
+    }
+
+    #[test]
+    fn rejects_an_empty_messages_array() {
+        let error = parse_messages("[]").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "no messages given: the messages array is empty"
+        );
     }
 }
