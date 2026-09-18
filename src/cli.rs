@@ -73,11 +73,15 @@ pub enum MemoryCommand {
         query: Option<String>,
         #[arg(long, help = "Maximum number of results")]
         limit: Option<u32>,
+        #[arg(long, help = "Include expired memories")]
+        show_expired: bool,
     },
     #[command(about = "List memories")]
     List {
         #[arg(long, help = "Maximum number of results")]
         limit: Option<u32>,
+        #[arg(long, help = "Include expired memories")]
+        show_expired: bool,
     },
     #[command(about = "Show a memory")]
     Get { id: String },

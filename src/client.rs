@@ -83,6 +83,8 @@ struct SearchRequest<'a> {
     filters: Option<&'a Scope>,
     #[serde(skip_serializing_if = "Option::is_none")]
     top_k: Option<u32>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    show_expired: bool,
 }
 
 #[derive(Serialize)]
@@ -118,20 +120,28 @@ impl Client {
         self.send(self.http.post(self.endpoint(&["memories"])).json(&body))
     }
 
-    pub fn search(&self, query: &str, scope: &Scope, limit: Option<u32>) -> Result<Value> {
+    pub fn search(
+        &self,
+        query: &str,
+        scope: &Scope,
+        limit: Option<u32>,
+        show_expired: bool,
+    ) -> Result<Value> {
         let body = SearchRequest {
             query,
             filters: (!scope.is_empty()).then_some(scope),
             top_k: limit,
+            show_expired,
         };
         self.send(self.http.post(self.endpoint(&["search"])).json(&body))
     }
 
-    pub fn list(&self, scope: &Scope, limit: Option<u32>) -> Result<Value> {
+    pub fn list(&self, scope: &Scope, limit: Option<u32>, show_expired: bool) -> Result<Value> {
         let limit = limit.map(|limit| limit.to_string());
         let pairs: Vec<_> = scope
             .pairs()
             .chain(limit.as_deref().map(|limit| ("top_k", limit)))
+            .chain(show_expired.then_some(("show_expired", "true")))
             .collect();
         let mut url = self.endpoint(&["memories"]);
         if !pairs.is_empty() {
@@ -239,7 +249,9 @@ mod tests {
             .create();
 
         let client = Client::new(&server.url(), None).unwrap();
-        client.search("drinks", &user("alice"), Some(3)).unwrap();
+        client
+            .search("drinks", &user("alice"), Some(3), false)
+            .unwrap();
 
         mock.assert();
     }
@@ -254,7 +266,9 @@ mod tests {
             .create();
 
         let client = Client::new(&server.url(), None).unwrap();
-        client.search("drinks", &Scope::default(), None).unwrap();
+        client
+            .search("drinks", &Scope::default(), None, false)
+            .unwrap();
 
         mock.assert();
     }
@@ -272,9 +286,35 @@ mod tests {
             .create();
 
         let client = Client::new(&server.url(), None).unwrap();
-        client.list(&user("alice"), Some(5)).unwrap();
+        client.list(&user("alice"), Some(5), false).unwrap();
 
         mock.assert();
+    }
+
+    #[test]
+    fn search_and_list_send_show_expired() {
+        let mut server = Server::new();
+        let search = server
+            .mock("POST", "/search")
+            .match_body(Matcher::Json(
+                json!({"query": "drinks", "show_expired": true}),
+            ))
+            .with_body("{}")
+            .create();
+        let list = server
+            .mock("GET", "/memories")
+            .match_query(Matcher::UrlEncoded("show_expired".into(), "true".into()))
+            .with_body("{}")
+            .create();
+
+        let client = Client::new(&server.url(), None).unwrap();
+        client
+            .search("drinks", &Scope::default(), None, true)
+            .unwrap();
+        client.list(&Scope::default(), None, true).unwrap();
+
+        search.assert();
+        list.assert();
     }
 
     #[test]
@@ -324,7 +364,7 @@ mod tests {
             .create();
 
         let client = Client::new(&server.url(), None).unwrap();
-        let error = client.list(&Scope::default(), None).unwrap_err();
+        let error = client.list(&Scope::default(), None, false).unwrap_err();
 
         assert_eq!(
             error.to_string(),

@@ -23,6 +23,7 @@ ferr0 add --messages '[{"role": "user", "content": "Use pnpm"}, {"role": "assist
 ferr0 add --file messages.json
 ferr0 search "drinks" --limit 5
 ferr0 list
+ferr0 list --show-expired
 ferr0 get <memory-id>
 ferr0 update <memory-id> "Prefers black coffee"
 ferr0 delete <memory-id>

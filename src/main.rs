@@ -53,11 +53,21 @@ fn memory_command(path: &Path, global: GlobalArgs, command: MemoryCommand) -> Re
             };
             (client.add(&messages, scope)?, "No memories added.")
         }
-        MemoryCommand::Search { query, limit } => {
+        MemoryCommand::Search {
+            query,
+            limit,
+            show_expired,
+        } => {
             let query = input::from_arg_or_stdin(query, "query")?;
-            (client.search(&query, scope, limit)?, not_found)
+            (
+                client.search(&query, scope, limit, show_expired)?,
+                not_found,
+            )
         }
-        MemoryCommand::List { limit } => (client.list(scope, limit)?, not_found),
+        MemoryCommand::List {
+            limit,
+            show_expired,
+        } => (client.list(scope, limit, show_expired)?, not_found),
         MemoryCommand::Get { id } => (client.get(&id)?, ""),
         MemoryCommand::Update { id, text } => (client.update(&id, &text)?, ""),
         MemoryCommand::Delete { id } => (client.delete(&id)?, ""),

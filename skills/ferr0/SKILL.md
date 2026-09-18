@@ -31,8 +31,8 @@ Always add `--json` and read the response as JSON.
 | --- | --- |
 | Store a fact | `ferr0 --json add --agent-id <id> "<text>"` |
 | Store messages with roles | `ferr0 --json add --agent-id <id> --messages '<json>'` |
-| Find relevant memories | `ferr0 --json search "<query>" [--limit N]` |
-| List stored memories | `ferr0 --json list [--limit N]` |
+| Find relevant memories | `ferr0 --json search "<query>" [--limit N] [--show-expired]` |
+| List stored memories | `ferr0 --json list [--limit N] [--show-expired]` |
 | Show one memory | `ferr0 --json get <memory-id>` |
 | Replace a memory's text | `ferr0 --json update <memory-id> "<text>"` |
 | Delete a memory | `ferr0 --json delete <memory-id>` |
