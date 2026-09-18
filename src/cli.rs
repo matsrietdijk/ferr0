@@ -87,6 +87,11 @@ pub enum MemoryCommand {
     Update { id: String, text: String },
     #[command(about = "Delete a memory or all memories matching scope filters")]
     Delete(DeleteArgs),
+    #[command(about = "Delete every memory on the server")]
+    Reset {
+        #[arg(long, help = "Skip confirmation")]
+        force: bool,
+    },
 }
 
 #[derive(Args)]

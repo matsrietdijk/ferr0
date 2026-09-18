@@ -102,6 +102,7 @@ fn destructive_commands_with_json_require_force_even_for_a_dry_run() {
     let mut server = Server::new();
     let delete = never(&mut server, "DELETE");
     let list = never(&mut server, "GET");
+    let reset = never(&mut server, "POST");
 
     for args in [
         &["--json", "delete", "--all", "--user-id", "alice"][..],
@@ -113,6 +114,7 @@ fn destructive_commands_with_json_require_force_even_for_a_dry_run() {
             "alice",
             "--dry-run",
         ],
+        &["--json", "reset"],
     ] {
         let run = ferr0(&server, args);
 
@@ -126,6 +128,7 @@ fn destructive_commands_with_json_require_force_even_for_a_dry_run() {
     }
     delete.assert();
     list.assert();
+    reset.assert();
 }
 
 #[test]
@@ -206,12 +209,40 @@ fn delete_dry_run_shows_the_memory_without_deleting() {
 }
 
 #[test]
+fn reset_deletes_every_memory_with_force() {
+    let mut server = Server::new();
+    let reset = server
+        .mock("POST", "/reset")
+        .with_body(r#"{"message": "All memories reset"}"#)
+        .create();
+
+    let run = ferr0(&server, &["reset", "--force"]);
+
+    reset.assert();
+    assert_eq!(run.stdout(), "All memories deleted\n");
+}
+
+#[test]
+fn reset_rejects_scope_flags() {
+    let mut server = Server::new();
+    let reset = never(&mut server, "POST");
+
+    let run = ferr0(&server, &["reset", "--user-id", "alice", "--force"]);
+
+    reset.assert();
+    assert!(!run.output.status.success());
+    assert!(run.stderr().contains("takes no --user-id"));
+}
+
+#[test]
 fn destructive_commands_without_force_fail_when_stdin_is_not_a_terminal() {
     let mut server = Server::new();
     let delete = never(&mut server, "DELETE");
+    let reset = never(&mut server, "POST");
 
     for args in [
         &["delete", "--all", "--user-id", "alice"][..],
+        &["reset"],
         &["entity", "delete", "--user-id", "alice"],
     ] {
         let run = ferr0(&server, args);
@@ -220,6 +251,7 @@ fn destructive_commands_without_force_fail_when_stdin_is_not_a_terminal() {
         assert!(run.stderr().contains("pass --force to confirm"));
     }
     delete.assert();
+    reset.assert();
 }
 
 #[test]

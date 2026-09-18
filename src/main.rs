@@ -41,6 +41,14 @@ fn run(cli: Cli) -> Result<()> {
 
 fn memory_command(path: &Path, global: GlobalArgs, command: MemoryCommand) -> Result<()> {
     let json = global.json;
+    let scoped = [&global.user_id, &global.agent_id, &global.run_id]
+        .iter()
+        .any(|id| id.is_some());
+    if scoped && matches!(command, MemoryCommand::Reset { .. }) {
+        bail!(
+            "reset deletes every memory on the server and takes no --user-id, --agent-id or --run-id"
+        );
+    }
     let settings = config::resolve(global, config::load(path)?)?;
     let client = Client::new(&settings.url, settings.api_key)?;
     let scope = &settings.scope;
@@ -66,6 +74,18 @@ fn memory_command(path: &Path, global: GlobalArgs, command: MemoryCommand) -> Re
         MemoryCommand::Get { id } => (client.get(&id)?, ""),
         MemoryCommand::Update { id, text } => (client.update(&id, &text)?, ""),
         MemoryCommand::Delete(args) => return delete_command(&client, scope, json, args),
+        MemoryCommand::Reset { force } => {
+            confirm::require_force_for_json(force, json)?;
+            let prompt = format!(
+                "Delete ALL memories on {}? This cannot be undone.",
+                settings.url
+            );
+            if !confirm::confirm_typed(&prompt, "reset", force)? {
+                println!("Cancelled.");
+                return Ok(());
+            }
+            return print_done(json, &client.reset()?, "All memories deleted");
+        }
     };
     if json {
         println!("{}", output::pretty(&response));

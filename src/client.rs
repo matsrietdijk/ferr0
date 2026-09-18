@@ -191,6 +191,10 @@ impl Client {
         self.send(self.http.delete(url))
     }
 
+    pub fn reset(&self) -> Result<Value> {
+        self.send(self.http.post(self.endpoint(&["reset"])))
+    }
+
     pub fn entities(&self) -> Result<Value> {
         self.send(self.http.get(self.endpoint(&["entities"])))
     }

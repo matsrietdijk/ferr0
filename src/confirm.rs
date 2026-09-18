@@ -1,7 +1,7 @@
 use std::io::{self, IsTerminal};
 
 use anyhow::{Result, bail};
-use dialoguer::{Confirm, theme::ColorfulTheme};
+use dialoguer::{Confirm, Input, theme::ColorfulTheme};
 
 pub fn require_force_for_json(force: bool, json: bool) -> Result<()> {
     if json && !force {
@@ -20,6 +20,18 @@ pub fn confirm(prompt: &str, force: bool) -> Result<bool> {
         .default(false)
         .interact()?;
     Ok(confirmed)
+}
+
+pub fn confirm_typed(prompt: &str, word: &str, force: bool) -> Result<bool> {
+    if force {
+        return Ok(true);
+    }
+    require_terminal()?;
+    let answer: String = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt(format!("{prompt} Type {word} to confirm"))
+        .allow_empty(true)
+        .interact_text()?;
+    Ok(answer.trim() == word)
 }
 
 fn require_terminal() -> Result<()> {

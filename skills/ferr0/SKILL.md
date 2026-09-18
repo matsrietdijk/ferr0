@@ -64,6 +64,7 @@ printf '%s' '[{"role": "user", "content": "<request>"}, {"role": "assistant", "c
 - Only `update` or `delete` memory ids returned by `search` or `list`, with the same user id, so every change stays within that user. The memory may have been stored by any agent.
 - Deletion cannot be undone. Confirm with the user before deleting unless they asked for that specific deletion.
 - `delete --all` and `entity delete` need `--force` with `--json`, even with `--dry-run`, which still deletes nothing. Before deleting, preview with `delete --all --dry-run` or `entity list`, show the user what will be deleted, and get their explicit confirmation. `delete --all` deletes the whole configured user scope unless you narrow it.
+- Never run `ferr0 reset`; it deletes every memory on the server. Tell the user to run it themselves.
 
 ## Failures
 
