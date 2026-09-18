@@ -17,6 +17,8 @@ pub struct FileConfig {
     pub url: Option<String>,
     pub api_key: Option<String>,
     pub user_id: Option<String>,
+    pub agent_id: Option<String>,
+    pub run_id: Option<String>,
 }
 
 impl FileConfig {
@@ -25,6 +27,8 @@ impl FileConfig {
             ConfigKey::Url => &mut self.url,
             ConfigKey::ApiKey => &mut self.api_key,
             ConfigKey::UserId => &mut self.user_id,
+            ConfigKey::AgentId => &mut self.agent_id,
+            ConfigKey::RunId => &mut self.run_id,
         };
         *slot = Some(value);
     }
@@ -32,7 +36,7 @@ impl FileConfig {
     pub fn describe(&self) -> String {
         let unset = "(unset)";
         format!(
-            "url = {}\napi_key = {}\nuser_id = {}",
+            "url = {}\napi_key = {}\nuser_id = {}\nagent_id = {}\nrun_id = {}",
             self.url.as_deref().unwrap_or(unset),
             if self.api_key.is_some() {
                 "(set)"
@@ -40,6 +44,8 @@ impl FileConfig {
                 unset
             },
             self.user_id.as_deref().unwrap_or(unset),
+            self.agent_id.as_deref().unwrap_or(unset),
+            self.run_id.as_deref().unwrap_or(unset),
         )
     }
 }
@@ -84,20 +90,46 @@ pub fn save(path: &Path, config: &FileConfig) -> Result<()> {
         .with_context(|| format!("cannot write {}", path.display()))
 }
 
-pub fn resolve(args: GlobalArgs, file: FileConfig) -> Result<Settings> {
+pub fn resolve(args: GlobalArgs, mut file: FileConfig) -> Result<Settings> {
     let url = args
         .url
-        .or(file.url)
+        .or(file.url.take())
         .context("no server URL: pass --url, set FERR0_URL, or run `ferr0 config set url <url>`")?;
+    let api_key = args.api_key.or(file.api_key.take());
     Ok(Settings {
         url,
-        api_key: args.api_key.or(file.api_key),
-        scope: Scope {
-            user_id: args.user_id.or(file.user_id),
-            agent_id: args.agent_id,
-            run_id: args.run_id,
-        },
+        api_key,
+        scope: scope(args.user_id, args.agent_id, args.run_id, file, |name| {
+            env::var(name).ok()
+        }),
     })
+}
+
+fn present(value: Option<String>) -> Option<String> {
+    value.filter(|value| !value.is_empty())
+}
+
+fn scope(
+    user_id: Option<String>,
+    agent_id: Option<String>,
+    run_id: Option<String>,
+    file: FileConfig,
+    env: impl Fn(&str) -> Option<String>,
+) -> Scope {
+    let (user_id, agent_id, run_id) = (present(user_id), present(agent_id), present(run_id));
+    if user_id.is_some() || agent_id.is_some() || run_id.is_some() {
+        return Scope {
+            user_id,
+            agent_id,
+            run_id,
+        };
+    }
+    let default = |name, stored| present(env(name)).or(present(stored));
+    Scope {
+        user_id: default("FERR0_USER_ID", file.user_id),
+        agent_id: default("FERR0_AGENT_ID", file.agent_id),
+        run_id: default("FERR0_RUN_ID", file.run_id),
+    }
 }
 
 #[cfg(test)]
@@ -155,12 +187,11 @@ mod tests {
         let file = FileConfig {
             url: Some("http://file".into()),
             api_key: Some("file-key".into()),
-            user_id: Some("file-user".into()),
+            ..FileConfig::default()
         };
         let settings = resolve(
             GlobalArgs {
                 url: Some("http://arg".into()),
-                user_id: Some("arg-user".into()),
                 ..args()
             },
             file,
@@ -169,7 +200,66 @@ mod tests {
 
         assert_eq!(settings.url, "http://arg");
         assert_eq!(settings.api_key.as_deref(), Some("file-key"));
-        assert_eq!(settings.scope.user_id.as_deref(), Some("arg-user"));
+    }
+
+    fn stored_scope() -> FileConfig {
+        FileConfig {
+            user_id: Some("file-user".into()),
+            agent_id: Some("file-agent".into()),
+            run_id: Some("file-run".into()),
+            ..FileConfig::default()
+        }
+    }
+
+    fn ids(scope: Scope) -> [Option<String>; 3] {
+        [scope.user_id, scope.agent_id, scope.run_id]
+    }
+
+    #[test]
+    fn scope_falls_back_per_id_to_env_then_file() {
+        let env = |name: &str| (name == "FERR0_AGENT_ID").then(|| "env-agent".to_string());
+
+        let scope = scope(None, None, None, stored_scope(), env);
+
+        assert_eq!(
+            ids(scope),
+            [
+                Some("file-user".into()),
+                Some("env-agent".into()),
+                Some("file-run".into())
+            ]
+        );
+    }
+
+    #[test]
+    fn scope_ignores_empty_env_values() {
+        let scope = scope(None, None, None, stored_scope(), |_| Some(String::new()));
+
+        assert_eq!(scope.user_id.as_deref(), Some("file-user"));
+    }
+
+    #[test]
+    fn scope_treats_empty_ids_as_unset() {
+        let file = FileConfig {
+            agent_id: Some(String::new()),
+            ..stored_scope()
+        };
+
+        let scope = scope(Some(String::new()), None, None, file, |_| None);
+
+        assert_eq!(
+            ids(scope),
+            [Some("file-user".into()), None, Some("file-run".into())]
+        );
+    }
+
+    #[test]
+    fn any_scope_flag_replaces_env_and_stored_ids() {
+        let env = |_: &str| Some("env-id".to_string());
+
+        let scope = scope(None, Some("arg-agent".into()), None, stored_scope(), env);
+
+        assert_eq!(ids(scope), [None, Some("arg-agent".into()), None]);
     }
 
     #[test]
@@ -190,5 +280,16 @@ mod tests {
         let text = config.describe();
         assert!(!text.contains("secret"));
         assert!(text.contains("api_key = (set)"));
+    }
+
+    #[test]
+    fn describe_shows_agent_and_run_ids() {
+        let mut config = FileConfig::default();
+        config.set(ConfigKey::AgentId, "claude-code".into());
+
+        let text = config.describe();
+
+        assert!(text.contains("agent_id = claude-code"), "{text}");
+        assert!(text.contains("run_id = (unset)"), "{text}");
     }
 }

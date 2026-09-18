@@ -93,6 +93,7 @@ fn prompt_config(theme: &ColorfulTheme, mut config: FileConfig) -> Result<FileCo
                 .filter(|key| !key.is_empty())
                 .or(config.api_key),
             user_id: Some(user_id),
+            ..config
         };
 
         match verify(&config) {
@@ -276,6 +277,7 @@ mod tests {
             url: Some(server.url()),
             api_key: Some("secret".into()),
             user_id: Some("alice".into()),
+            ..FileConfig::default()
         }
     }
 

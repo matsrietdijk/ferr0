@@ -23,16 +23,23 @@ pub struct GlobalArgs {
         help = "Mem0 API key"
     )]
     pub api_key: Option<String>,
-    #[arg(long, global = true, env = "FERR0_USER_ID", help = "Scope to a user")]
+    #[arg(
+        long,
+        global = true,
+        help = "Scope to a user [default env: FERR0_USER_ID]"
+    )]
     pub user_id: Option<String>,
     #[arg(
         long,
         global = true,
-        env = "FERR0_AGENT_ID",
-        help = "Scope to an agent"
+        help = "Scope to an agent [default env: FERR0_AGENT_ID]"
     )]
     pub agent_id: Option<String>,
-    #[arg(long, global = true, env = "FERR0_RUN_ID", help = "Scope to a run")]
+    #[arg(
+        long,
+        global = true,
+        help = "Scope to a run [default env: FERR0_RUN_ID]"
+    )]
     pub run_id: Option<String>,
     #[arg(long, global = true, help = "Print the raw server response as JSON")]
     pub json: bool,
@@ -100,4 +107,6 @@ pub enum ConfigKey {
     Url,
     ApiKey,
     UserId,
+    AgentId,
+    RunId,
 }
