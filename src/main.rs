@@ -5,7 +5,7 @@ mod input;
 mod output;
 mod setup;
 
-use std::{path::Path, process::ExitCode};
+use std::{env, path::Path, process::ExitCode};
 
 use anyhow::Result;
 use clap::Parser;
@@ -78,6 +78,7 @@ fn config_command(path: &Path, command: ConfigCommand) -> Result<()> {
             config::save(path, &file)?;
             println!("Saved to {}", path.display());
         }
+        ConfigCommand::Get { key } => println!("{}", file.get(key, |name| env::var(name).ok())),
         ConfigCommand::Show => println!("{}\n{}", path.display(), file.describe()),
     }
     Ok(())

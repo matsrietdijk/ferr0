@@ -98,6 +98,8 @@ pub enum MemoryCommand {
 pub enum ConfigCommand {
     #[command(about = "Store a value in the config file")]
     Set { key: ConfigKey, value: String },
+    #[command(about = "Print a single value from the config file")]
+    Get { key: ConfigKey },
     #[command(about = "Show the config file path and values")]
     Show,
 }

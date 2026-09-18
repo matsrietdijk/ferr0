@@ -33,6 +33,23 @@ impl FileConfig {
         *slot = Some(value);
     }
 
+    pub fn get(&self, key: ConfigKey, env: impl Fn(&str) -> Option<String>) -> String {
+        let (name, stored) = match key {
+            ConfigKey::Url => ("FERR0_URL", &self.url),
+            ConfigKey::ApiKey => ("FERR0_API_KEY", &self.api_key),
+            ConfigKey::UserId => ("FERR0_USER_ID", &self.user_id),
+            ConfigKey::AgentId => ("FERR0_AGENT_ID", &self.agent_id),
+            ConfigKey::RunId => ("FERR0_RUN_ID", &self.run_id),
+        };
+        let value = present(env(name))
+            .or_else(|| stored.clone())
+            .unwrap_or_default();
+        match key {
+            ConfigKey::ApiKey => redact(&value),
+            _ => value,
+        }
+    }
+
     pub fn describe(&self) -> String {
         let unset = "(unset)";
         format!(
@@ -47,6 +64,18 @@ impl FileConfig {
             self.agent_id.as_deref().unwrap_or(unset),
             self.run_id.as_deref().unwrap_or(unset),
         )
+    }
+}
+
+fn redact(key: &str) -> String {
+    let chars: Vec<char> = key.chars().collect();
+    match chars.len() {
+        0 => "(not set)".into(),
+        1..=8 => chars.iter().take(2).chain(&['*'; 3]).collect(),
+        len => {
+            let (head, tail) = (&chars[..4], &chars[len - 4..]);
+            format!("{}...{}", String::from_iter(head), String::from_iter(tail))
+        }
     }
 }
 
@@ -291,5 +320,39 @@ mod tests {
 
         assert!(text.contains("agent_id = claude-code"), "{text}");
         assert!(text.contains("run_id = (unset)"), "{text}");
+    }
+
+    #[test]
+    fn get_returns_a_single_value_or_empty() {
+        let mut config = FileConfig::default();
+        config.set(ConfigKey::RunId, "run-1".into());
+
+        assert_eq!(config.get(ConfigKey::RunId, |_| None), "run-1");
+        assert_eq!(config.get(ConfigKey::UserId, |_| None), "");
+    }
+
+    #[test]
+    fn get_prefers_non_empty_env_values() {
+        let mut config = FileConfig::default();
+        config.set(ConfigKey::UserId, "file-user".into());
+        let env = |name: &str| (name == "FERR0_USER_ID").then(|| "env-user".to_string());
+
+        assert_eq!(config.get(ConfigKey::UserId, env), "env-user");
+        assert_eq!(
+            config.get(ConfigKey::UserId, |_| Some(String::new())),
+            "file-user"
+        );
+    }
+
+    #[test]
+    fn get_redacts_api_key() {
+        let mut config = FileConfig::default();
+        assert_eq!(config.get(ConfigKey::ApiKey, |_| None), "(not set)");
+
+        config.set(ConfigKey::ApiKey, "m0-abcdefghijkl".into());
+        assert_eq!(config.get(ConfigKey::ApiKey, |_| None), "m0-a...ijkl");
+
+        config.set(ConfigKey::ApiKey, "short".into());
+        assert_eq!(config.get(ConfigKey::ApiKey, |_| None), "sh***");
     }
 }
