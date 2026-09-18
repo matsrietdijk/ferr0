@@ -8,11 +8,10 @@ compatibility: Requires the ferr0 CLI and network access to a self-hosted Mem0 s
 
 `ferr0` is a command-line client for a self-hosted Mem0 REST server. Use it only when the user asks you to work with memories.
 
-## Before the first call
+## Setup
 
-1. Run `ferr0 --version`. If the command is missing, tell the user to install ferr0 and stop.
-2. Run `ferr0 config show`. It lists the config file values; the environment variables `FERR0_URL`, `FERR0_API_KEY`, and `FERR0_USER_ID` override them.
-3. If the URL, API key, or user id is set in neither place, ask the user to configure it with `ferr0 config set <url|api-key|user-id> <value>` and stop. Never ask for the API key in chat, never print it, and never pass it with `--api-key`, because command lines end up in logs and transcripts.
+- If the `ferr0` command is not found, tell the user to install ferr0 and stop.
+- If configuration is missing, ask the user to set it with `ferr0 config set <url|api-key|user-id> <value>` and stop. Never ask for the API key in chat, never print it, and never pass it with `--api-key`, because command lines end up in logs and transcripts.
 
 ## Scope
 
