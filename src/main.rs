@@ -11,7 +11,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use cli::{Cli, Command, ConfigCommand, GlobalArgs, MemoryCommand};
-use client::{Client, Message};
+use client::{AddOptions, Client, Message};
 
 fn main() -> Result<ExitCode> {
     let cli = Cli::parse();
@@ -45,13 +45,24 @@ fn memory_command(path: &Path, global: GlobalArgs, command: MemoryCommand) -> Re
             text,
             messages,
             file,
+            metadata,
+            no_infer,
+            expires,
         } => {
+            let options = AddOptions {
+                metadata: input::parse_metadata(metadata.as_deref())?,
+                infer: no_infer.then_some(false),
+                expiration_date: input::parse_expires(expires.as_deref())?,
+            };
             let messages = match (messages, file) {
                 (Some(json), _) => input::parse_messages(&json)?,
                 (None, Some(file)) => input::messages_from_file(&file)?,
                 (None, None) => vec![Message::user(input::from_arg_or_stdin(text, "text")?)],
             };
-            (client.add(&messages, scope)?, "No memories added.")
+            (
+                client.add(&messages, scope, &options)?,
+                "No memories added.",
+            )
         }
         MemoryCommand::Search { query, limit } => {
             let query = input::from_arg_or_stdin(query, "query")?;

@@ -50,6 +50,8 @@ printf '%s' '[{"role": "user", "content": "<request>"}, {"role": "assistant", "c
 - `assistant`: something you did or said, such as a recommendation, a decision, or information you researched.
 - Include the user message the assistant message responds to when the assistant message does not stand on its own.
 
+`add` also accepts `--metadata '<json>'`, `--expires YYYY-MM-DD` (a future date) for facts that stop being true on a known date, and `--no-infer` to store the text as-is without extracting memories from it. Use `--no-infer` only when the user asks for their exact wording to be stored.
+
 `add`, `search`, and `list` return `{"results": [...]}`. Each result has an `id` and `memory`, and stored memories have an `attributed_to` of `user` or `assistant` that tells whose statement the memory came from; search results also have a `score`, and add results have an `event` (`ADD`, `UPDATE`, `DELETE`, or `NONE`). `get` returns a single memory object with `id` and `memory`. `update` and `delete` return `{"message": "..."}`.
 
 ## Working with memories

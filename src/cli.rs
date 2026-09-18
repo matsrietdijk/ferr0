@@ -66,6 +66,16 @@ pub enum MemoryCommand {
             help = "Read the messages JSON array from a file"
         )]
         file: Option<PathBuf>,
+        #[arg(short, long, value_name = "JSON", help = "Metadata as JSON")]
+        metadata: Option<String>,
+        #[arg(long, help = "Store the messages as-is instead of extracting memories")]
+        no_infer: bool,
+        #[arg(
+            long,
+            value_name = "YYYY-MM-DD",
+            help = "Expiration date, in the future"
+        )]
+        expires: Option<String>,
     },
     #[command(about = "Search memories")]
     Search {

@@ -21,6 +21,8 @@ ferr0 add "Prefers green tea"
 echo "Works from home on Fridays" | ferr0 add
 ferr0 add --messages '[{"role": "user", "content": "Use pnpm"}, {"role": "assistant", "content": "Switched the repo to pnpm"}]'
 ferr0 add --file messages.json
+ferr0 add "Standup moves to 10:00" --metadata '{"topic": "work"}' --expires 2030-12-31
+ferr0 add --no-infer "Deploys happen on Tuesdays"
 ferr0 search "drinks" --limit 5
 ferr0 list
 ferr0 get <memory-id>

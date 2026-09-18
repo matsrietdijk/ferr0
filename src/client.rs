@@ -69,11 +69,23 @@ impl Message {
     }
 }
 
+#[derive(Debug, Default, Serialize)]
+pub struct AddOptions {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub infer: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiration_date: Option<String>,
+}
+
 #[derive(Serialize)]
 struct AddRequest<'a> {
     messages: &'a [Message],
     #[serde(flatten)]
     scope: &'a Scope,
+    #[serde(flatten)]
+    options: &'a AddOptions,
 }
 
 #[derive(Serialize)]
@@ -113,8 +125,12 @@ impl Client {
         })
     }
 
-    pub fn add(&self, messages: &[Message], scope: &Scope) -> Result<Value> {
-        let body = AddRequest { messages, scope };
+    pub fn add(&self, messages: &[Message], scope: &Scope, options: &AddOptions) -> Result<Value> {
+        let body = AddRequest {
+            messages,
+            scope,
+            options,
+        };
         self.send(self.http.post(self.endpoint(&["memories"])).json(&body))
     }
 
@@ -217,11 +233,46 @@ mod tests {
 
         let client = Client::new(&server.url(), Some("secret".into())).unwrap();
         let response = client
-            .add(&[Message::user("likes tea".into())], &user("alice"))
+            .add(
+                &[Message::user("likes tea".into())],
+                &user("alice"),
+                &AddOptions::default(),
+            )
             .unwrap();
 
         mock.assert();
         assert_eq!(response, json!({"results": []}));
+    }
+
+    #[test]
+    fn add_sends_metadata_infer_and_expiration_date() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("POST", "/memories")
+            .match_body(Matcher::Json(json!({
+                "messages": [{"role": "user", "content": "likes tea"}],
+                "metadata": {"topic": "drinks"},
+                "infer": false,
+                "expiration_date": "2026-12-31",
+            })))
+            .with_body(r#"{"results": []}"#)
+            .create();
+
+        let options = AddOptions {
+            metadata: Some(json!({"topic": "drinks"})),
+            infer: Some(false),
+            expiration_date: Some("2026-12-31".into()),
+        };
+        let client = Client::new(&server.url(), None).unwrap();
+        client
+            .add(
+                &[Message::user("likes tea".into())],
+                &Scope::default(),
+                &options,
+            )
+            .unwrap();
+
+        mock.assert();
     }
 
     #[test]
