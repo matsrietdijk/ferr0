@@ -1,12 +1,12 @@
 use std::{fmt, time::Duration};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use reqwest::{
     StatusCode, Url,
     blocking::{Client as Http, RequestBuilder},
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -48,10 +48,6 @@ impl Scope {
         .into_iter()
         .filter_map(|(key, value)| value.as_deref().map(|value| (key, value)))
     }
-
-    fn is_empty(&self) -> bool {
-        self.pairs().next().is_none()
-    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -76,13 +72,21 @@ struct AddRequest<'a> {
     scope: &'a Scope,
 }
 
+pub struct SearchOptions {
+    pub limit: Option<u32>,
+    pub threshold: f64,
+    pub filter: Map<String, Value>,
+    pub show_expired: bool,
+}
+
 #[derive(Serialize)]
 struct SearchRequest<'a> {
     query: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    filters: Option<&'a Scope>,
+    #[serde(skip_serializing_if = "Map::is_empty")]
+    filters: Map<String, Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     top_k: Option<u32>,
+    threshold: f64,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     show_expired: bool,
 }
@@ -120,18 +124,28 @@ impl Client {
         self.send(self.http.post(self.endpoint(&["memories"])).json(&body))
     }
 
-    pub fn search(
-        &self,
-        query: &str,
-        scope: &Scope,
-        limit: Option<u32>,
-        show_expired: bool,
-    ) -> Result<Value> {
+    pub fn search(&self, query: &str, scope: &Scope, options: SearchOptions) -> Result<Value> {
+        if !(0.0..=1.0).contains(&options.threshold) {
+            bail!("--threshold must be between 0.0 and 1.0");
+        }
+        let mut filters = options.filter;
+        if !filters.contains_key("AND") && !filters.contains_key("OR") {
+            for (key, value) in scope.pairs() {
+                if filters.contains_key(key) {
+                    bail!(
+                        "--filter cannot set {key} because the scope already sets it; use --{} instead",
+                        key.replace('_', "-")
+                    );
+                }
+                filters.insert(key.into(), value.into());
+            }
+        }
         let body = SearchRequest {
             query,
-            filters: (!scope.is_empty()).then_some(scope),
-            top_k: limit,
-            show_expired,
+            filters,
+            top_k: options.limit,
+            threshold: options.threshold,
+            show_expired: options.show_expired,
         };
         self.send(self.http.post(self.endpoint(&["search"])).json(&body))
     }
@@ -205,6 +219,15 @@ mod tests {
 
     use super::*;
 
+    fn options() -> SearchOptions {
+        SearchOptions {
+            limit: None,
+            threshold: 0.3,
+            filter: Map::new(),
+            show_expired: false,
+        }
+    }
+
     fn user(id: &str) -> Scope {
         Scope {
             user_id: Some(id.into()),
@@ -244,14 +267,17 @@ mod tests {
                 "query": "drinks",
                 "filters": {"user_id": "alice"},
                 "top_k": 3,
+                "threshold": 0.3,
             })))
             .with_body("{}")
             .create();
 
+        let options = SearchOptions {
+            limit: Some(3),
+            ..options()
+        };
         let client = Client::new(&server.url(), None).unwrap();
-        client
-            .search("drinks", &user("alice"), Some(3), false)
-            .unwrap();
+        client.search("drinks", &user("alice"), options).unwrap();
 
         mock.assert();
     }
@@ -261,13 +287,13 @@ mod tests {
         let mut server = Server::new();
         let mock = server
             .mock("POST", "/search")
-            .match_body(Matcher::Json(json!({"query": "drinks"})))
+            .match_body(Matcher::Json(json!({"query": "drinks", "threshold": 0.3})))
             .with_body("{}")
             .create();
 
         let client = Client::new(&server.url(), None).unwrap();
         client
-            .search("drinks", &Scope::default(), None, false)
+            .search("drinks", &Scope::default(), options())
             .unwrap();
 
         mock.assert();
@@ -292,12 +318,95 @@ mod tests {
     }
 
     #[test]
+    fn search_merges_filter_with_scope_and_sends_threshold() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("POST", "/search")
+            .match_body(Matcher::Json(json!({
+                "query": "drinks",
+                "filters": {"user_id": "alice", "agent_id": "claude-code", "category": "food"},
+                "threshold": 0.5,
+            })))
+            .with_body("{}")
+            .create();
+
+        let options = SearchOptions {
+            threshold: 0.5,
+            filter: json!({"agent_id": "claude-code", "category": "food"})
+                .as_object()
+                .unwrap()
+                .clone(),
+            ..options()
+        };
+        let client = Client::new(&server.url(), None).unwrap();
+        client.search("drinks", &user("alice"), options).unwrap();
+
+        mock.assert();
+    }
+
+    #[test]
+    fn search_rejects_a_filter_that_overrides_the_scope() {
+        let options = SearchOptions {
+            filter: json!({"user_id": "bob"}).as_object().unwrap().clone(),
+            ..options()
+        };
+        let client = Client::new("http://localhost:1", None).unwrap();
+        let error = client
+            .search("drinks", &user("alice"), options)
+            .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "--filter cannot set user_id because the scope already sets it; use --user-id instead"
+        );
+    }
+
+    #[test]
+    fn search_sends_a_logical_filter_in_place_of_the_scope() {
+        let filter = json!({"OR": [{"user_id": "alice"}, {"user_id": "bob"}]});
+        let mut server = Server::new();
+        let mock = server
+            .mock("POST", "/search")
+            .match_body(Matcher::Json(json!({
+                "query": "drinks",
+                "filters": filter,
+                "threshold": 0.3,
+            })))
+            .with_body("{}")
+            .create();
+
+        let options = SearchOptions {
+            filter: filter.as_object().unwrap().clone(),
+            ..options()
+        };
+        let client = Client::new(&server.url(), None).unwrap();
+        client.search("drinks", &user("alice"), options).unwrap();
+
+        mock.assert();
+    }
+
+    #[test]
+    fn search_rejects_a_threshold_outside_zero_to_one() {
+        let client = Client::new("http://localhost:1", None).unwrap();
+        for threshold in [-0.1, 1.1, f64::NAN, f64::INFINITY] {
+            let options = SearchOptions {
+                threshold,
+                ..options()
+            };
+            let error = client
+                .search("drinks", &Scope::default(), options)
+                .unwrap_err();
+            assert_eq!(error.to_string(), "--threshold must be between 0.0 and 1.0");
+        }
+    }
+
+    #[test]
     fn search_and_list_send_show_expired() {
         let mut server = Server::new();
         let search = server
             .mock("POST", "/search")
             .match_body(Matcher::Json(
-                json!({"query": "drinks", "show_expired": true}),
+                json!({"query": "drinks", "threshold": 0.3, "show_expired": true}),
             ))
             .with_body("{}")
             .create();
@@ -307,10 +416,12 @@ mod tests {
             .with_body("{}")
             .create();
 
+        let options = SearchOptions {
+            show_expired: true,
+            ..options()
+        };
         let client = Client::new(&server.url(), None).unwrap();
-        client
-            .search("drinks", &Scope::default(), None, true)
-            .unwrap();
+        client.search("drinks", &Scope::default(), options).unwrap();
         client.list(&Scope::default(), None, true).unwrap();
 
         search.assert();

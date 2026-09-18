@@ -22,6 +22,7 @@ echo "Works from home on Fridays" | ferr0 add
 ferr0 add --messages '[{"role": "user", "content": "Use pnpm"}, {"role": "assistant", "content": "Switched the repo to pnpm"}]'
 ferr0 add --file messages.json
 ferr0 search "drinks" --limit 5
+ferr0 search "drinks" --threshold 0.5 --filter '{"topic": "food"}'
 ferr0 list
 ferr0 list --show-expired
 ferr0 get <memory-id>

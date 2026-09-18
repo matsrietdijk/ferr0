@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
+use serde_json::{Map, Value};
 
 use crate::client::Message;
 
@@ -44,6 +45,10 @@ pub fn parse_messages(json: &str) -> Result<Vec<Message>> {
         bail!("no messages given: the messages array is empty");
     }
     Ok(messages)
+}
+
+pub fn parse_object(json: &str, name: &str) -> Result<Map<String, Value>> {
+    serde_json::from_str(json).with_context(|| format!("invalid JSON in {name}"))
 }
 
 #[cfg(test)]
@@ -107,5 +112,19 @@ mod tests {
             error.to_string(),
             "no messages given: the messages array is empty"
         );
+    }
+
+    #[test]
+    fn parses_a_json_object() {
+        let object = parse_object(r#"{"category": "food"}"#, "--filter").unwrap();
+        assert_eq!(object["category"], "food");
+    }
+
+    #[test]
+    fn rejects_json_that_is_not_an_object() {
+        for json in ["[]", r#""food""#, "{", ""] {
+            let error = parse_object(json, "--filter").unwrap_err();
+            assert_eq!(error.to_string(), "invalid JSON in --filter");
+        }
     }
 }
