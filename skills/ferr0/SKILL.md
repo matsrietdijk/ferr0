@@ -19,8 +19,8 @@ Memories are scoped by user and agent, and every id passed to `search` or `list`
 
 - **User:** use the configured user id and never invent one. Pass `--user-id` only when the user explicitly asks to work with a specific other user id, and only for that request.
 - **Agent:** identify yourself with a stable agent id, derived from the agent application you run in, not the model or vendor. Use lowercase kebab-case, such as `claude-code`, `codex-cli`, `gemini-cli`, `cursor`, `github-copilot`, or `opencode`. Never include model names, versions, or session ids. If you cannot tell which application you run in, ask the user once.
-- Pass `--agent-id <id>` on every `add`, so each memory records which agent stored it.
-- Do not pass `--agent-id` to `search` or `list`, so memories stored by other agents for the same user are found. Only pass it when the user asks for memories from this agent. If `FERR0_AGENT_ID` is set in the environment, run these as `env -u FERR0_AGENT_ID ferr0 ...` to avoid narrowing the results.
+- Set the agent id on every `add` through the environment, as `env FERR0_AGENT_ID=<id> ferr0 ...`, so each memory records which agent stored it. Any scope flag (`--user-id`, `--agent-id`, `--run-id`) replaces all configured ids, so passing `--agent-id` alone would drop the configured user id. When you pass `--user-id`, also pass `--agent-id <id>`.
+- Do not set the agent id for `search` or `list`, so memories stored by other agents for the same user are found. Only set it, with `env FERR0_AGENT_ID=<id>`, when the user asks for memories from this agent. If `FERR0_AGENT_ID` is set in the environment, run these as `env -u FERR0_AGENT_ID ferr0 ...` to avoid narrowing the results. An `agent-id` or `run-id` stored in the ferr0 config also narrows them; if expected memories are missing, tell the user.
 - Do not pass `--run-id`; memories should outlive the session.
 
 ## Commands
@@ -29,21 +29,21 @@ Always add `--json` and read the response as JSON.
 
 | Goal | Command |
 | --- | --- |
-| Store a fact | `ferr0 --json add --agent-id <id> "<text>"` |
-| Store messages with roles | `ferr0 --json add --agent-id <id> --messages '<json>'` |
+| Store a fact | `env FERR0_AGENT_ID=<id> ferr0 --json add "<text>"` |
+| Store messages with roles | `env FERR0_AGENT_ID=<id> ferr0 --json add --messages '<json>'` |
 | Find relevant memories | `ferr0 --json search "<query>" [--limit N]` |
 | List stored memories | `ferr0 --json list [--limit N]` |
 | Show one memory | `ferr0 --json get <memory-id>` |
 | Replace a memory's text | `ferr0 --json update <memory-id> "<text>"` |
 | Delete a memory | `ferr0 --json delete <memory-id>` |
 
-`add` and `search` read the text or query from stdin when it is omitted and input is piped, for example `printf '%s' "<text>" | ferr0 --json add --agent-id <id>`, which avoids shell quoting problems.
+`add` and `search` read the text or query from stdin when it is omitted and input is piped, for example `printf '%s' "<text>" | env FERR0_AGENT_ID=<id> ferr0 --json add`, which avoids shell quoting problems.
 
 Text passed to `add` is stored as a message from the user. To record what you said or did, pass `--messages` with a JSON array of `{"role": "...", "content": "..."}` objects, or pipe the array with `--file /dev/stdin`:
 
 ```sh
 printf '%s' '[{"role": "user", "content": "<request>"}, {"role": "assistant", "content": "<what you did>"}]' \
-  | ferr0 --json add --agent-id <id> --file /dev/stdin
+  | env FERR0_AGENT_ID=<id> ferr0 --json add --file /dev/stdin
 ```
 
 - `user`: something the user stated, such as a preference, plan, or fact about themselves.
