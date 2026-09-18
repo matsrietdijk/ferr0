@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, time::Duration};
 
 use anyhow::{Context, Result};
 use reqwest::{
@@ -7,6 +7,8 @@ use reqwest::{
 };
 use serde::Serialize;
 use serde_json::Value;
+
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug)]
 pub struct ServerError {
@@ -91,8 +93,12 @@ impl Client {
             .ok()
             .filter(|url| !url.cannot_be_a_base())
             .with_context(|| format!("invalid server URL: {base_url}"))?;
+        let http = Http::builder()
+            .timeout(REQUEST_TIMEOUT)
+            .build()
+            .context("cannot build the HTTP client")?;
         Ok(Self {
-            http: Http::new(),
+            http,
             base,
             api_key,
         })
