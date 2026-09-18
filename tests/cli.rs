@@ -23,6 +23,10 @@ impl Run {
 }
 
 fn ferr0(server: &ServerGuard, args: &[&str]) -> Run {
+    ferr0_with_env(server, &[], args)
+}
+
+fn ferr0_with_env(server: &ServerGuard, env: &[(&str, &str)], args: &[&str]) -> Run {
     let config = TempDir::new().unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_ferr0"))
         .args(["--url", &server.url()])
@@ -33,6 +37,7 @@ fn ferr0(server: &ServerGuard, args: &[&str]) -> Run {
         .env_remove("FERR0_USER_ID")
         .env_remove("FERR0_AGENT_ID")
         .env_remove("FERR0_RUN_ID")
+        .envs(env.iter().copied())
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -235,6 +240,24 @@ fn reset_rejects_scope_flags() {
 }
 
 #[test]
+fn reset_ignores_scope_environment_variables() {
+    let mut server = Server::new();
+    let reset = server
+        .mock("POST", "/reset")
+        .with_body(r#"{"message": "All memories reset"}"#)
+        .create();
+
+    let run = ferr0_with_env(
+        &server,
+        &[("FERR0_USER_ID", "alice")],
+        &["reset", "--force"],
+    );
+
+    reset.assert();
+    assert!(run.output.status.success(), "{}", run.stderr());
+}
+
+#[test]
 fn destructive_commands_without_force_fail_when_stdin_is_not_a_terminal() {
     let mut server = Server::new();
     let delete = never(&mut server, "DELETE");
@@ -312,6 +335,29 @@ fn entity_delete_deletes_each_given_entity_with_force() {
             "agent": {"message": "Entity deleted"},
         })
     );
+}
+
+#[test]
+fn entity_delete_ignores_scope_environment_variables() {
+    let mut server = Server::new();
+    let user = server
+        .mock("DELETE", "/entities/user/alice")
+        .with_body(r#"{"message": "Entity deleted"}"#)
+        .create();
+    let agent = server
+        .mock("DELETE", "/entities/agent/claude-code")
+        .expect(0)
+        .create();
+
+    let run = ferr0_with_env(
+        &server,
+        &[("FERR0_AGENT_ID", "claude-code")],
+        &["entity", "delete", "--user-id", "alice", "--force"],
+    );
+
+    user.assert();
+    agent.assert();
+    assert_eq!(run.stdout(), "Entity deleted with all memories\n");
 }
 
 #[test]

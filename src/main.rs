@@ -9,7 +9,7 @@ mod setup;
 use std::{path::Path, process::ExitCode};
 
 use anyhow::{Result, bail};
-use clap::Parser;
+use clap::{ArgMatches, CommandFactory, FromArgMatches, parser::ValueSource};
 
 use cli::{Cli, Command, ConfigCommand, DeleteArgs, EntityCommand, GlobalArgs, MemoryCommand};
 use client::{Client, Message, SERVER_LIST_LIMIT, Scope};
@@ -18,7 +18,14 @@ use serde_json::{Map, Value, json};
 const DRY_RUN_NOTE: &str = "No changes made (dry run).";
 
 fn main() -> Result<ExitCode> {
-    let cli = Cli::parse();
+    let matches = Cli::command().get_matches();
+    let mut cli = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
+    if matches!(
+        cli.command,
+        Command::Entity(_) | Command::Memory(MemoryCommand::Reset { .. })
+    ) {
+        keep_typed_scope(&mut cli.global, &matches);
+    }
     let json = cli.global.json && matches!(cli.command, Command::Memory(_) | Command::Entity(_));
     match run(cli) {
         Err(error) if json => {
@@ -26,6 +33,18 @@ fn main() -> Result<ExitCode> {
             Ok(ExitCode::FAILURE)
         }
         result => result.map(|()| ExitCode::SUCCESS),
+    }
+}
+
+fn keep_typed_scope(global: &mut GlobalArgs, matches: &ArgMatches) {
+    for (id, value) in [
+        ("user_id", &mut global.user_id),
+        ("agent_id", &mut global.agent_id),
+        ("run_id", &mut global.run_id),
+    ] {
+        if matches.value_source(id) != Some(ValueSource::CommandLine) {
+            *value = None;
+        }
     }
 }
 
